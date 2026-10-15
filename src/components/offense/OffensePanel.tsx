@@ -19,6 +19,7 @@ import {
   CircleDot,
   Layers,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 
 export const OffensePanel: React.FC = () => {
@@ -29,6 +30,9 @@ export const OffensePanel: React.FC = () => {
     currentFormation,
     actionDraft,
     activeScreen,
+    isPremoveMode,
+    premoveQueue,
+    isExecutingPremove,
     selectPlayer,
     setBallHolder,
     setFormation,
@@ -36,6 +40,10 @@ export const OffensePanel: React.FC = () => {
     resetPositions,
     startDraft,
     clearActiveScreen,
+    togglePremoveMode,
+    undoLastPremove,
+    clearPremoveQueue,
+    executePremoveQueue,
   } = useGameStore();
 
   const [passTarget, setPassTarget] = useState<Position>('SG');
@@ -84,6 +92,117 @@ export const OffensePanel: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Premove (Play Designer) Section */}
+      {!isPremoveMode ? (
+        <button
+          onClick={togglePremoveMode}
+          className="w-full flex items-center justify-between p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-300 transition text-xs font-semibold shadow-sm group"
+        >
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 group-hover:scale-110 transition">
+              <Zap className="w-4 h-4 fill-emerald-400/30" />
+            </div>
+            <div className="text-left">
+              <div className="font-bold text-white flex items-center gap-1.5">
+                <span>Chế độ Premove</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-900/60 text-emerald-300 font-mono">
+                  MỚI
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-400 font-normal">
+                Soạn chuỗi bài chạy (Hậu vệ đứng yên chờ kích hoạt)
+              </div>
+            </div>
+          </div>
+          <span className="px-2 py-1 rounded-md bg-emerald-900/40 text-emerald-300 border border-emerald-700/50 text-[11px] font-bold">
+            BẬT
+          </span>
+        </button>
+      ) : (
+        <div className="flex flex-col gap-2 p-3 rounded-xl border border-emerald-500/60 bg-emerald-950/40 text-xs shadow-xl animate-in fade-in">
+          <div className="flex items-center justify-between border-b border-emerald-800/60 pb-2">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-emerald-400 animate-pulse fill-emerald-400/20" />
+              <div>
+                <div className="font-bold text-emerald-300 uppercase tracking-wide flex items-center gap-1.5">
+                  <span>Premove Đang Bật</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-900 text-emerald-300 font-mono">
+                    {premoveQueue.length} bước
+                  </span>
+                </div>
+                <div className="text-[10px] text-slate-300">
+                  ❄️ Hàng thủ đối phương đang đóng băng
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={togglePremoveMode}
+              disabled={isExecutingPremove}
+              className="p-1 text-slate-400 hover:text-red-300 transition"
+              title="Thoát chế độ Premove"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Queued Steps List */}
+          <div className="flex flex-col gap-1 max-h-40 overflow-y-auto pr-0.5">
+            {premoveQueue.length === 0 ? (
+              <div className="text-[11px] text-emerald-300/70 italic py-2 text-center bg-slate-950/40 rounded border border-emerald-900/30">
+                Chưa có bước nào. Hãy chọn cầu thủ & thao tác bài chạy bên dưới!
+              </div>
+            ) : (
+              premoveQueue.map((step, idx) => (
+                <div
+                  key={step.id}
+                  className="flex items-center justify-between gap-1.5 p-1.5 rounded bg-slate-900/80 border border-emerald-800/40 text-[11px]"
+                >
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 font-bold font-mono flex items-center justify-center shrink-0 text-[10px]">
+                      {idx + 1}
+                    </span>
+                    <span className="text-slate-200 truncate">{step.description}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Execute and management buttons */}
+          <div className="flex flex-col gap-1.5 pt-1">
+            <button
+              onClick={executePremoveQueue}
+              disabled={premoveQueue.length === 0 || isExecutingPremove}
+              className="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-lg shadow-md flex items-center justify-center gap-1.5 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              <span>
+                {isExecutingPremove
+                  ? 'ĐANG THỰC THI BÀI CHẠY...'
+                  : `KÍCH HOẠT CHUỖI BÀI CHẠY (${premoveQueue.length} BƯỚC)`}
+              </span>
+            </button>
+
+            {premoveQueue.length > 0 && !isExecutingPremove && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={undoLastPremove}
+                  className="flex-1 py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] border border-slate-700 transition text-center"
+                >
+                  ↩️ Hủy bước gần nhất
+                </button>
+                <button
+                  onClick={clearPremoveQueue}
+                  className="flex-1 py-1 px-2 bg-slate-800 hover:bg-red-950/60 text-red-300 rounded text-[11px] border border-slate-700 transition text-center"
+                >
+                  🗑️ Xóa chuỗi
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 1. Offensive Formations */}
       <div className="flex flex-col gap-2">

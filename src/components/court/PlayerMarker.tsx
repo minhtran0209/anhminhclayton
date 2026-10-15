@@ -65,6 +65,7 @@ export const PlayerMarker: React.FC<PlayerMarkerProps> = ({
   const isOffense = player.team === 'offense';
   const { x, y } = player.coord;
   const playbackSpeed = useGameStore((s) => s.uiPreferences.playbackSpeed);
+  const isPremoveMode = useGameStore((s) => s.isPremoveMode);
 
   const groupRef = useRef<SVGGElement | null>(null);
   const currentPosRef = useRef<Point>({ x, y });
@@ -245,6 +246,32 @@ export const PlayerMarker: React.FC<PlayerMarkerProps> = ({
               : player.state === 'DENY'
               ? 'DENY'
               : 'ZONE'}
+          </text>
+        </g>
+      )}
+
+      {/* Premove Mode Frozen Indicator for Defenders */}
+      {!isOffense && isPremoveMode && (
+        <g transform="translate(0, 4.8)">
+          <rect
+            x="-6.0"
+            y="-1.5"
+            width="12.0"
+            height="2.8"
+            rx="1.2"
+            fill="#0f172a"
+            stroke="#38bdf8"
+            strokeWidth="0.4"
+            opacity="0.95"
+          />
+          <text
+            y="0.4"
+            textAnchor="middle"
+            fontSize="1.3"
+            fontWeight="bold"
+            fill="#7dd3fc"
+          >
+            ❄️ ĐỨNG YÊN
           </text>
         </g>
       )}

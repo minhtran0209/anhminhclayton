@@ -111,6 +111,13 @@ export interface ActionDraft {
   isValid: boolean;
 }
 
+export interface PremoveStep {
+  id: string;
+  stepNumber: number;
+  draft: ActionDraft;
+  description: string;
+}
+
 export interface TacticalEvent {
   id: string;
   stepNumber: number;

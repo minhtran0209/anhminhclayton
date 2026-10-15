@@ -13,6 +13,7 @@ import {
   Player,
   Point,
   Position,
+  PremoveStep,
   TacticalEvent,
   UIPreferences,
 } from '../types/basketball';
@@ -89,6 +90,16 @@ interface GameState {
   updateUIPreferences: (prefs: Partial<UIPreferences>) => void;
   recalculateDefense: () => void;
   clearActiveScreen: () => void;
+
+  // Premove / Play Designer Mode
+  isPremoveMode: boolean;
+  premoveQueue: PremoveStep[];
+  premoveInitialSnapshot: GameSnapshot | null;
+  isExecutingPremove: boolean;
+  togglePremoveMode: () => void;
+  undoLastPremove: () => void;
+  clearPremoveQueue: () => void;
+  executePremoveQueue: () => Promise<void>;
 }
 
 // Initial Offense from 5-Out
@@ -183,6 +194,42 @@ function createSnapshot(state: {
   };
 }
 
+function restoreStateFromSnapshot(snapshot: GameSnapshot) {
+  const restoredOffense = {} as Record<Position, Player>;
+  POSITIONS.forEach((pos) => {
+    restoredOffense[pos] = {
+      id: `offense-${pos}`,
+      team: 'offense',
+      position: pos,
+      coord: { ...snapshot.offense[pos] },
+    };
+  });
+
+  const restoredDefense = {} as Record<Position, Player>;
+  POSITIONS.forEach((pos) => {
+    const d = snapshot.defense[pos];
+    restoredDefense[pos] = {
+      id: `defense-${pos}`,
+      team: 'defense',
+      position: pos,
+      coord: { ...d.coord },
+      state: d.state,
+      assignment: d.assignment,
+      explanation: d.explanation,
+    };
+  });
+
+  return {
+    offense: restoredOffense,
+    defense: restoredDefense,
+    ballHolder: snapshot.ballHolder,
+    currentFormation: snapshot.currentFormation,
+    defensiveSystem: snapshot.defensiveSystem,
+    defensiveSettings: { ...snapshot.defensiveSettings },
+    activeScreen: snapshot.activeScreen ? { ...snapshot.activeScreen } : undefined,
+  };
+}
+
 const initialOffense = buildInitialOffense();
 const initialBallHolder: Position = 'PG';
 const initialSystem: DefensiveSystem = 'Man-to-Man';
@@ -226,6 +273,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     playbackSpeed: 1,
     showDebugOverlay: false,
   },
+
+  // Premove / Play Designer Mode
+  isPremoveMode: false,
+  premoveQueue: [],
+  premoveInitialSnapshot: null,
+  isExecutingPremove: false,
 
   selectPlayer: (player) => {
     set({ selectedPlayer: player });
@@ -527,7 +580,35 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     if (!state.actionDraft) return;
 
-    // Save snapshot to history past
+    if (state.isPremoveMode) {
+      // In Premove mode:
+      // Offense moves, ball passes, screen is staged, BUT DEFENSE STAYS 100% FROZEN!
+      const stepNumber = state.premoveQueue.length + 1;
+      const snapshot = createSnapshot(state);
+
+      const { updatedOffense, updatedBallHolder, event, activeScreen } =
+        executeOffensiveAction(state.actionDraft, snapshot, stepNumber);
+
+      const newStep: PremoveStep = {
+        id: `premove-${Date.now()}-${stepNumber}`,
+        stepNumber,
+        draft: { ...state.actionDraft },
+        description: event.description,
+      };
+
+      set({
+        offense: updatedOffense,
+        // DEFENSE STAYS FROZEN! Do not touch state.defense!
+        defense: state.defense,
+        ballHolder: updatedBallHolder,
+        activeScreen,
+        actionDraft: null,
+        premoveQueue: [...state.premoveQueue, newStep],
+      });
+      return;
+    }
+
+    // Normal mode (Defenders react immediately)
     const snapshot = createSnapshot(state);
     const newStepNumber = state.timeline.length + 1;
 
@@ -546,6 +627,144 @@ export const useGameStore = create<GameState>((set, get) => ({
         future: [],
       },
       playbackStep: state.timeline.length,
+    });
+  },
+
+  togglePremoveMode: () => {
+    const state = get();
+    if (!state.isPremoveMode) {
+      // Enter Premove Mode: Save starting snapshot
+      const snapshot = createSnapshot(state);
+      set({
+        isPremoveMode: true,
+        premoveInitialSnapshot: snapshot,
+        premoveQueue: [],
+        actionDraft: null,
+      });
+    } else {
+      // Exit Premove Mode: Restore starting state if actions were queued
+      if (state.premoveInitialSnapshot) {
+        const restored = restoreStateFromSnapshot(state.premoveInitialSnapshot);
+        set({
+          ...restored,
+          isPremoveMode: false,
+          premoveInitialSnapshot: null,
+          premoveQueue: [],
+          actionDraft: null,
+        });
+      } else {
+        set({
+          isPremoveMode: false,
+          premoveInitialSnapshot: null,
+          premoveQueue: [],
+          actionDraft: null,
+        });
+      }
+    }
+  },
+
+  undoLastPremove: () => {
+    const state = get();
+    if (!state.isPremoveMode || state.premoveQueue.length === 0 || !state.premoveInitialSnapshot) return;
+
+    const remainingQueue = state.premoveQueue.slice(0, -1);
+    const restored = restoreStateFromSnapshot(state.premoveInitialSnapshot);
+
+    // Replay remaining drafts offense-only
+    let currentOffense = restored.offense;
+    let currentBallHolder = restored.ballHolder;
+    let currentScreen = restored.activeScreen;
+
+    remainingQueue.forEach((step, idx) => {
+      const snap: GameSnapshot = {
+        ...state.premoveInitialSnapshot!,
+        offense: POSITIONS.reduce((acc, p) => ({ ...acc, [p]: currentOffense[p].coord }), {} as any),
+        defense: state.premoveInitialSnapshot!.defense,
+        ballHolder: currentBallHolder,
+        activeScreen: currentScreen,
+      };
+      const res = executeOffensiveAction(step.draft, snap, idx + 1);
+      currentOffense = res.updatedOffense;
+      currentBallHolder = res.updatedBallHolder;
+      currentScreen = res.activeScreen;
+    });
+
+    set({
+      offense: currentOffense,
+      defense: restored.defense,
+      ballHolder: currentBallHolder,
+      activeScreen: currentScreen,
+      premoveQueue: remainingQueue,
+      actionDraft: null,
+    });
+  },
+
+  clearPremoveQueue: () => {
+    const state = get();
+    if (state.premoveInitialSnapshot) {
+      const restored = restoreStateFromSnapshot(state.premoveInitialSnapshot);
+      set({
+        ...restored,
+        premoveQueue: [],
+        actionDraft: null,
+      });
+    } else {
+      set({ premoveQueue: [], actionDraft: null });
+    }
+  },
+
+  executePremoveQueue: async () => {
+    const state = get();
+    if (state.premoveQueue.length === 0 || !state.premoveInitialSnapshot || state.isExecutingPremove) return;
+
+    set({ isExecutingPremove: true });
+
+    // 1. Reset to initial snapshot before premoves began
+    const restored = restoreStateFromSnapshot(state.premoveInitialSnapshot);
+    set({
+      ...restored,
+      actionDraft: null,
+    });
+
+    const queue = [...state.premoveQueue];
+    const speed = state.uiPreferences.playbackSpeed || 1;
+    const stepDelay = Math.round(1100 / Math.max(speed, 0.25));
+
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    // 2. Execute each queued step in sequence with full automated defensive reaction!
+    for (let i = 0; i < queue.length; i++) {
+      const currentState = get();
+      const currentSnapshot = createSnapshot(currentState);
+      const stepNumber = currentState.timeline.length + 1;
+
+      const { updatedOffense, updatedDefense, updatedBallHolder, event, activeScreen } =
+        executeOffensiveAction(queue[i].draft, currentSnapshot, stepNumber);
+
+      set({
+        offense: updatedOffense,
+        defense: updatedDefense,
+        ballHolder: updatedBallHolder,
+        activeScreen,
+        timeline: [...currentState.timeline, event],
+        history: {
+          past: [...currentState.history.past, currentSnapshot],
+          future: [],
+        },
+        playbackStep: currentState.timeline.length,
+      });
+
+      if (i < queue.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, stepDelay));
+      }
+    }
+
+    // 3. Complete execution
+    set({
+      isPremoveMode: false,
+      premoveQueue: [],
+      premoveInitialSnapshot: null,
+      isExecutingPremove: false,
     });
   },
 

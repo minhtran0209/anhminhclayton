@@ -6,10 +6,11 @@ import { TacticalPath } from './TacticalPath';
 import { PassingLanesOverlay } from './PassingLanesOverlay';
 import { ZoneOverlay } from './ZoneOverlay';
 import { DefensiveShellOverlay } from './DefensiveShellOverlay';
+import { PremoveQueueOverlay } from './PremoveQueueOverlay';
 import { calculateSpacingIssues, clampPoint, screenToCourt } from '../../engine/geometry/courtGeometry';
 import { Position, Point, ShotResult } from '../../types/basketball';
 import { POSITIONS } from '../../config/constants';
-import { Check, X, AlertTriangle, Gauge } from 'lucide-react';
+import { Check, X, AlertTriangle, Gauge, Zap, Play, Undo2 } from 'lucide-react';
 
 export const BasketballCourt: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -23,6 +24,9 @@ export const BasketballCourt: React.FC = () => {
     actionDraft,
     timeline,
     uiPreferences,
+    isPremoveMode,
+    premoveQueue,
+    isExecutingPremove,
     selectPlayer,
     updateCustomPlayerCoord,
     addDraftPoint,
@@ -30,6 +34,9 @@ export const BasketballCourt: React.FC = () => {
     confirmDraft,
     cancelDraft,
     setPlaybackSpeed,
+    togglePremoveMode,
+    undoLastPremove,
+    executePremoveQueue,
   } = useGameStore();
 
   const [draggingPlayer, setDraggingPlayer] = useState<Position | null>(null);
@@ -212,6 +219,57 @@ export const BasketballCourt: React.FC = () => {
     <div className="relative flex flex-col items-center justify-center w-full h-full p-2 select-none">
       {/* SVG Container with responsive aspect ratio */}
       <div className="relative w-full max-w-[680px] aspect-square rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-slate-950 flex items-center justify-center">
+        {/* Floating Premove Status Banner on Court */}
+        {isPremoveMode && (
+          <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between bg-slate-900/95 border border-emerald-500/60 p-2 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2.5 w-2.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <div>
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1">
+                  ⚡ Premove ({premoveQueue.length} bước)
+                </span>
+                <span className="text-[10px] text-slate-300 hidden sm:inline">
+                  Hậu vệ đang ĐÓNG BĂNG. Hãy tạo chuỗi bài chạy!
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {premoveQueue.length > 0 && (
+                <>
+                  <button
+                    onClick={executePremoveQueue}
+                    disabled={isExecutingPremove}
+                    className="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-lg shadow-md flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>{isExecutingPremove ? 'ĐANG CHẠY...' : `THỰC THI (${premoveQueue.length})`}</span>
+                  </button>
+                  <button
+                    onClick={undoLastPremove}
+                    disabled={isExecutingPremove}
+                    className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 transition"
+                    title="Hủy bước gần nhất trong chuỗi"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+              <button
+                onClick={togglePremoveMode}
+                disabled={isExecutingPremove}
+                className="p-1 bg-slate-800 hover:bg-red-950/60 text-slate-400 hover:text-red-300 text-xs rounded-lg border border-slate-700 transition"
+                title="Thoát chế độ Premove"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         <svg
           ref={svgRef}
           viewBox="0 0 100 100"
@@ -230,6 +288,12 @@ export const BasketballCourt: React.FC = () => {
           <DefensiveShellOverlay
             defense={defense}
             visible={uiPreferences.showDefensiveShell}
+          />
+
+          {/* Premove Queued Actions Overlay */}
+          <PremoveQueueOverlay
+            queue={premoveQueue}
+            visible={isPremoveMode}
           />
 
           {/* Optional Passing Lanes Overlay */}
