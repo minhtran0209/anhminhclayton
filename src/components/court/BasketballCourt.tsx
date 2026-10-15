@@ -11,7 +11,7 @@ import { calculateSpacingIssues, clampPoint, screenToCourt } from '../../engine/
 import { Position, Point, ShotResult } from '../../types/basketball';
 import { POSITIONS } from '../../config/constants';
 import { Check, X, AlertTriangle, Gauge, Zap, Play, Undo2, Minimize2, Maximize2 } from 'lucide-react';
-import { AISimulationHUD, AIWinAnalysisModal } from '../simulation';
+import { AISimulationHUD, AIWinAnalysisModal, DefenseStopAnalysisModal } from '../simulation';
 
 export const BasketballCourt: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -223,6 +223,9 @@ export const BasketballCourt: React.FC = () => {
     <div className="relative flex flex-col items-center justify-center w-full h-full p-2 select-none">
       {/* AI Win Analysis Celebration Modal */}
       <AIWinAnalysisModal />
+
+      {/* AI Defense Stop Analysis Modal */}
+      <DefenseStopAnalysisModal />
 
       {/* SVG Container with responsive aspect ratio */}
       <div className="relative w-full max-w-[680px] aspect-square rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-slate-950 flex items-center justify-center">

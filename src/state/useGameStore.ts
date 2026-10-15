@@ -8,6 +8,9 @@ import {
   AIPossessionAnalysis,
   AIStats,
   ActionDraft,
+  DefenseAdaptiveMemory,
+  DefenseStats,
+  DefenseStopAnalysis,
   DefensiveSettings,
   DefensiveSystem,
   GameSnapshot,
@@ -21,6 +24,7 @@ import {
   UIPreferences,
 } from '../types/basketball';
 import { decideNextAIAction, generateTacticalWinAnalysis } from '../engine/simulation/offensiveAI';
+import { analyzeOpponentAndAdaptDefense, generateDefenseStopAnalysis } from '../engine/simulation/defensiveAI';
 import {
   FORMATION_DESCRIPTIONS,
   OFFENSIVE_FORMATIONS,
@@ -105,7 +109,7 @@ interface GameState {
   clearPremoveQueue: () => void;
   executePremoveQueue: () => Promise<void>;
 
-  // AI Tactical Simulation Mode
+  // AI Tactical Simulation Mode (Offense Focus)
   isSimulating: boolean;
   isSimulationPaused: boolean;
   aiCurrentThought: string;
@@ -118,6 +122,20 @@ interface GameState {
   stopSimulation: () => void;
   dismissWinAnalysis: () => void;
   runNextAIPossession: () => Promise<void>;
+
+  // AI Tactical Simulation Mode (Defense Focus - Real-time Learning & Adaptation)
+  isDefenseSimulating: boolean;
+  isDefenseSimulationPaused: boolean;
+  defenseCurrentThought: string;
+  defenseCurrentTactic: string;
+  defenseAdaptiveMemory: DefenseAdaptiveMemory;
+  defenseStats: DefenseStats;
+  startDefenseSimulation: () => void;
+  pauseDefenseSimulation: () => void;
+  resumeDefenseSimulation: () => void;
+  stopDefenseSimulation: () => void;
+  dismissDefenseStopAnalysis: () => void;
+  runNextDefensePossession: () => Promise<void>;
 }
 
 // Initial Offense from 5-Out
@@ -262,6 +280,7 @@ const initialDefense = computeDefense(
 const savedCustom = loadSavedCustomFormation() || { ...OFFENSIVE_FORMATIONS['5-Out'] };
 
 let currentSimulationSession = 0;
+let currentDefenseSimulationSession = 0;
 
 export const useGameStore = create<GameState>((set, get) => ({
   offense: initialOffense,
@@ -312,6 +331,27 @@ export const useGameStore = create<GameState>((set, get) => ({
     turnoversCount: 0,
     totalReward: 0,
     latestWinAnalysis: null,
+    historyLog: [],
+  },
+
+  // AI Tactical Simulation Mode (Defense Focus)
+  isDefenseSimulating: false,
+  isDefenseSimulationPaused: false,
+  defenseCurrentThought: '',
+  defenseCurrentTactic: '',
+  defenseAdaptiveMemory: {
+    recentOffenseActions: [],
+    consecutiveStops: 0,
+    consecutiveConceded: 0,
+    activeAdjustments: [],
+  },
+  defenseStats: {
+    possessionsDefended: 0,
+    stopsCount: 0,
+    stealsCount: 0,
+    pointsConceded: 0,
+    totalDefenseReward: 0,
+    latestStopAnalysis: null,
     historyLog: [],
   },
 
@@ -1324,6 +1364,227 @@ export const useGameStore = create<GameState>((set, get) => ({
         await new Promise((resolve) => setTimeout(resolve, 2000));
         if (sessionId === currentSimulationSession && get().isSimulating && !get().isSimulationPaused) {
           get().runNextAIPossession();
+        }
+      }
+    }
+  },
+
+  startDefenseSimulation: () => {
+    // If offense simulation is running, stop it
+    if (get().isSimulating) {
+      get().stopSimulation();
+    }
+    currentDefenseSimulationSession++;
+    set({
+      isDefenseSimulating: true,
+      isDefenseSimulationPaused: false,
+      defenseCurrentThought: '🛡️ AI Phòng Thủ Khởi Động: Đang theo dõi, phân tích và bắt bài đối phương theo thời gian thực...',
+      defenseCurrentTactic: 'Khởi động giám sát cự ly',
+    });
+    get().runNextDefensePossession();
+  },
+
+  pauseDefenseSimulation: () => {
+    set({
+      isDefenseSimulationPaused: true,
+      defenseCurrentThought: 'Đã tạm dừng mô phỏng phòng thủ. Bấm Tiếp tục để chạy tiếp.',
+    });
+  },
+
+  resumeDefenseSimulation: () => {
+    set({ isDefenseSimulationPaused: false });
+    get().runNextDefensePossession();
+  },
+
+  stopDefenseSimulation: () => {
+    currentDefenseSimulationSession++;
+    set({
+      isDefenseSimulating: false,
+      isDefenseSimulationPaused: false,
+      defenseCurrentThought: '',
+      defenseCurrentTactic: '',
+    });
+  },
+
+  dismissDefenseStopAnalysis: () => {
+    set((state) => ({
+      defenseStats: {
+        ...state.defenseStats,
+        latestStopAnalysis: null,
+      },
+    }));
+    if (get().isDefenseSimulating && !get().isDefenseSimulationPaused) {
+      get().runNextDefensePossession();
+    }
+  },
+
+  runNextDefensePossession: async () => {
+    const sessionId = currentDefenseSimulationSession;
+    const state = get();
+    if (!state.isDefenseSimulating) return;
+
+    // Reset positions to base formation for fresh possession
+    get().resetPositions();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    if (sessionId !== currentDefenseSimulationSession || !get().isDefenseSimulating || get().isDefenseSimulationPaused) return;
+
+    const possessionEvents: TacticalEvent[] = [];
+    const speed = get().uiPreferences.playbackSpeed || 1;
+    const stepDelay = Math.round(1300 / Math.max(speed, 0.25));
+
+    let finalEvent: TacticalEvent | null = null;
+    let lastEvent: TacticalEvent | null = null;
+
+    // Defense AI adapts autonomously before/during possession steps
+    for (let step = 1; step <= 5; step++) {
+      const curState = get();
+      if (sessionId !== currentDefenseSimulationSession || !curState.isDefenseSimulating || curState.isDefenseSimulationPaused) return;
+
+      // 1. DEFENSE AI ADAPTATION: Real-time opponent reading & dynamic customization
+      const defDecision = analyzeOpponentAndAdaptDefense(
+        curState.offense,
+        curState.defense,
+        curState.ballHolder,
+        curState.defensiveSystem,
+        curState.defensiveSettings,
+        curState.defenseAdaptiveMemory,
+        lastEvent,
+        step
+      );
+
+      // Re-calculate defense positions with adapted system and settings
+      const updatedDefenseByAI = computeDefense(
+        curState.offense,
+        curState.ballHolder,
+        defDecision.adaptedSystem,
+        defDecision.adaptedSettings,
+        curState.activeScreen
+      );
+
+      set({
+        defensiveSystem: defDecision.adaptedSystem,
+        defensiveSettings: defDecision.adaptedSettings,
+        defense: updatedDefenseByAI,
+        defenseCurrentThought: defDecision.thought,
+        defenseCurrentTactic: defDecision.tacticalAdjustment,
+        defenseAdaptiveMemory: defDecision.updatedMemory,
+      });
+
+      // 2. OFFENSE DECISION (Offense attacks defense)
+      const curAfterDef = get();
+      const decision = decideNextAIAction(
+        curAfterDef.offense,
+        curAfterDef.defense,
+        curAfterDef.ballHolder,
+        curAfterDef.defensiveSystem,
+        curAfterDef.defensiveSettings,
+        curAfterDef.activeScreen,
+        step,
+        curAfterDef.aiAdaptiveMemory
+      );
+
+      set({ selectedPlayer: decision.draft.player });
+
+      // Execute offensive action
+      const curSnapshot = createSnapshot(curAfterDef);
+      const stepNumber = curAfterDef.timeline.length + 1;
+
+      const { updatedOffense, updatedDefense, updatedBallHolder, event, activeScreen } =
+        executeOffensiveAction(decision.draft, curSnapshot, stepNumber);
+
+      possessionEvents.push(event);
+      lastEvent = event;
+
+      set({
+        offense: updatedOffense,
+        defense: updatedDefense,
+        ballHolder: updatedBallHolder,
+        activeScreen,
+        timeline: [...curAfterDef.timeline, event],
+        history: {
+          past: [...curAfterDef.history.past, curSnapshot],
+          future: [],
+        },
+        playbackStep: curAfterDef.timeline.length,
+      });
+
+      // Check if steal occurred or shot/layup attempted
+      if (
+        event.isSteal ||
+        decision.isFinishingAttempt ||
+        event.shotResult ||
+        decision.draft.action === 'shoot' ||
+        decision.draft.action === 'layup' ||
+        decision.draft.action === 'shoot_off_screen'
+      ) {
+        finalEvent = event;
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, stepDelay));
+      if (sessionId !== currentDefenseSimulationSession || !get().isDefenseSimulating || get().isDefenseSimulationPaused) return;
+    }
+
+    if (!finalEvent && possessionEvents.length > 0) {
+      finalEvent = possessionEvents[possessionEvents.length - 1];
+    }
+
+    if (finalEvent) {
+      const cur = get();
+      const newPossessionsDefended = cur.defenseStats.possessionsDefended + 1;
+      const isSteal = Boolean(finalEvent.isSteal);
+      const isStop = isSteal || (finalEvent.shotResult ? !finalEvent.shotResult.made : false);
+      const pointsScored = (!isSteal && finalEvent.shotResult && finalEvent.shotResult.made) ? finalEvent.shotResult.points : 0;
+
+      let thoughtText = '';
+      let stopAnalysis: DefenseStopAnalysis | null = null;
+
+      if (isStop) {
+        stopAnalysis = generateDefenseStopAnalysis(
+          possessionEvents,
+          finalEvent,
+          cur.defensiveSystem,
+          cur.defensiveSettings,
+          newPossessionsDefended
+        );
+        thoughtText = isSteal
+          ? `⚡ [CƯỚP BÓNG THÀNH CÔNG] Hậu vệ ${finalEvent.stealer} đã đoạt bóng ở cự ly ${finalEvent.stealDistance}m! Thưởng phòng thủ: +${stopAnalysis.reward} pts!`
+          : `🛡️ [PHÒNG THỦ THÀNH CÔNG] Khóa chặt đối phương! Cú ném không vào rổ (${finalEvent.shotResult?.contestLevel || 'CONTESTED'}). Thưởng phòng thủ: +${stopAnalysis.reward} pts!`;
+      } else {
+        const is3P = finalEvent.shotResult?.shotType === 'three';
+        thoughtText = is3P
+          ? `❌ [SỬA SAI THỜI GIAN THỰC] Bị thủng 3 điểm (+3đ)! AI phòng thủ nhận diện cự ly hở và tự động chuyển sang dâng cao áp sát ngoại vi đợt tới!`
+          : `❌ [SỬA SAI THỜI GIAN THỰC] Bị lọt điểm cận thành (+2đ)! AI phòng thủ tự động siết chặt khu vực hình thang và tăng Compactness đợt tới!`;
+      }
+
+      set({
+        defenseCurrentThought: thoughtText,
+        defenseStats: {
+          possessionsDefended: newPossessionsDefended,
+          stopsCount: cur.defenseStats.stopsCount + (isStop ? 1 : 0),
+          stealsCount: cur.defenseStats.stealsCount + (isSteal ? 1 : 0),
+          pointsConceded: cur.defenseStats.pointsConceded + pointsScored,
+          totalDefenseReward: cur.defenseStats.totalDefenseReward + (stopAnalysis ? stopAnalysis.reward : 0),
+          latestStopAnalysis: stopAnalysis,
+          historyLog: [
+            {
+              id: `def-hist-${Date.now()}`,
+              isStop,
+              isSteal,
+              reward: stopAnalysis ? stopAnalysis.reward : -20,
+              summary: `${isSteal ? '⚡ CƯỚP BÓNG (STEAL)' : isStop ? '🛡️ CHẶN THÀNH CÔNG (STOP)' : '❌ BỊ THỦNG ĐIỂM'}: ${cur.defensiveSystem} (${isStop ? `+${stopAnalysis?.reward || 100} pts` : `-${pointsScored}đ`})`,
+              systemUsed: cur.defensiveSystem,
+            },
+            ...cur.defenseStats.historyLog.slice(0, 19),
+          ],
+        },
+      });
+
+      // If defense conceded (not a stop) and still simulating, proceed to next possession after short delay
+      if (!isStop) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        if (sessionId === currentDefenseSimulationSession && get().isDefenseSimulating && !get().isDefenseSimulationPaused) {
+          get().runNextDefensePossession();
         }
       }
     }

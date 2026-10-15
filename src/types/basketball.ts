@@ -205,4 +205,47 @@ export interface AIAdaptiveMemory {
   favoredTactic?: 'inside_attack' | 'pick_and_roll' | 'drive_and_kick' | 'perimeter_ball_movement' | 'backdoor_cuts';
 }
 
+export interface DefenseStopAnalysis {
+  id: string;
+  title: string;
+  systemUsed: DefensiveSystem;
+  settingsAdjusted: Partial<DefensiveSettings>;
+  opponentTacticDetected: string;
+  counterStrategy: string;
+  reward: number;
+  explanation: string;
+  keyDefenseMoves: string[];
+  isSteal?: boolean;
+  stealer?: Position;
+  contestLevel?: ShotResult['contestLevel'];
+}
+
+export interface DefenseStats {
+  possessionsDefended: number;
+  stopsCount: number;
+  stealsCount: number;
+  pointsConceded: number;
+  totalDefenseReward: number;
+  latestStopAnalysis: DefenseStopAnalysis | null;
+  historyLog: Array<{
+    id: string;
+    isStop: boolean;
+    isSteal: boolean;
+    reward: number;
+    summary: string;
+    systemUsed: DefensiveSystem;
+  }>;
+}
+
+export interface DefenseAdaptiveMemory {
+  opponentTendency?: 'paint_attack' | 'perimeter_threes' | 'pick_and_roll' | 'ball_movement' | 'isolation';
+  recentOffenseActions: string[];
+  consecutiveStops: number;
+  consecutiveConceded: number;
+  lastStopReason?: string;
+  lastConcededReason?: string;
+  activeAdjustments: string[];
+  favoredCounterSystem?: DefensiveSystem;
+}
+
 

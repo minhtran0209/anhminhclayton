@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { APP_CONFIG } from '../../config/constants';
 import { useGameStore } from '../../state/useGameStore';
-import { Activity, BookOpen, X, Info, Bot, Sparkles } from 'lucide-react';
+import { Activity, BookOpen, X, Info, Bot, Sparkles, Shield } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const [showGuide, setShowGuide] = useState(false);
@@ -15,6 +15,9 @@ export const Header: React.FC = () => {
     isSimulating,
     startSimulation,
     stopSimulation,
+    isDefenseSimulating,
+    startDefenseSimulation,
+    stopDefenseSimulation,
   } = useGameStore();
 
   const ballPos = offense[ballHolder].coord;
@@ -95,7 +98,7 @@ export const Header: React.FC = () => {
 
         {/* Actions Group: AI Simulate & Guide */}
         <div className="flex items-center gap-2">
-          {/* AI Simulation Button */}
+          {/* AI Offense Simulation Button */}
           <button
             onClick={() => {
               if (isSimulating) {
@@ -104,15 +107,37 @@ export const Header: React.FC = () => {
                 startSimulation();
               }
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-md active:scale-95 ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition shadow-md active:scale-95 ${
               isSimulating
                 ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white animate-pulse border border-red-400 ring-2 ring-red-500/50'
                 : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white border border-emerald-400/50 shadow-emerald-600/20'
             }`}
-            title="Kích hoạt AI tự động tìm cách chiến thắng hàng phòng thủ đối phương"
+            title="Kích hoạt AI tấn công tự động tìm cách chiến thắng hàng phòng thủ đối phương"
           >
             <Bot className="w-4 h-4" />
-            <span>{isSimulating ? 'Dừng Giả Lập' : 'Giả Lập AI (Simulate)'}</span>
+            <span className="hidden sm:inline">{isSimulating ? 'Dừng Tấn Công' : 'Giả Lập Tấn Công'}</span>
+            <span className="sm:hidden">{isSimulating ? 'Dừng TC' : 'Tấn Công'}</span>
+          </button>
+
+          {/* AI Defense Simulation Button (User Request) */}
+          <button
+            onClick={() => {
+              if (isDefenseSimulating) {
+                stopDefenseSimulation();
+              } else {
+                startDefenseSimulation();
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition shadow-md active:scale-95 ${
+              isDefenseSimulating
+                ? 'bg-gradient-to-r from-rose-600 to-red-700 text-white animate-pulse border border-red-400 ring-2 ring-red-500/50'
+                : 'bg-gradient-to-r from-rose-600 via-red-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white border border-rose-400/50 shadow-rose-600/20'
+            }`}
+            title="Kích hoạt AI phòng thủ tự học hỏi, bắt bài và tùy chỉnh đội hình theo thời gian thực"
+          >
+            <Shield className="w-4 h-4" />
+            <span className="hidden sm:inline">{isDefenseSimulating ? 'Dừng Phòng Thủ' : 'Giả Lập Phòng Thủ'}</span>
+            <span className="sm:hidden">{isDefenseSimulating ? 'Dừng PT' : 'Phòng Thủ'}</span>
           </button>
 
           {/* Help / Guide Button */}

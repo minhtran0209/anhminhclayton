@@ -6,7 +6,7 @@ import {
 } from '../../types/basketball';
 import { DEFENSIVE_SYSTEMS, DEFENSE_DESCRIPTIONS } from '../../tactics/defense/defaults';
 import { SLIDER_TOOLTIPS, POSITIONS } from '../../config/constants';
-import { Shield, Info, HelpCircle, Network } from 'lucide-react';
+import { Shield, Info, HelpCircle, Network, Bot, Sparkles, BrainCircuit } from 'lucide-react';
 
 export const DefensePanel: React.FC = () => {
   const {
@@ -14,6 +14,12 @@ export const DefensePanel: React.FC = () => {
     defensiveSystem,
     defensiveSettings,
     uiPreferences,
+    isDefenseSimulating,
+    defenseCurrentThought,
+    defenseCurrentTactic,
+    defenseStats,
+    startDefenseSimulation,
+    stopDefenseSimulation,
     setDefensiveSystem,
     updateDefensiveSettings,
     updateUIPreferences,
@@ -52,6 +58,79 @@ export const DefensePanel: React.FC = () => {
           <Network className="w-3.5 h-3.5" />
           <span>Khối Shell: {uiPreferences.showDefensiveShell ? 'BẬT' : 'TẮT'}</span>
         </button>
+      </div>
+
+      {/* AI Autonomous Defense Simulation Card (User Request) */}
+      <div
+        className={`p-2.5 rounded-xl border transition shadow-sm ${
+          isDefenseSimulating
+            ? 'border-red-500/60 bg-red-950/40 text-white shadow-red-500/10'
+            : 'border-slate-800 bg-slate-950/60 text-slate-300'
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className={`p-1.5 rounded-lg shrink-0 ${
+                isDefenseSimulating ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              <Bot className={`w-4 h-4 ${isDefenseSimulating ? 'animate-bounce text-red-400' : ''}`} />
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-xs flex items-center gap-1.5">
+                <span>Giả Lập Phòng Thủ AI</span>
+                {isDefenseSimulating && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-red-900 text-red-300 font-mono animate-pulse">
+                    LIVE
+                  </span>
+                )}
+              </div>
+              <div className="text-[10px] text-slate-400 truncate">
+                {isDefenseSimulating
+                  ? `Chặn ${defenseStats.stopsCount}/${defenseStats.possessionsDefended} (Steals: ${defenseStats.stealsCount}, +${defenseStats.totalDefenseReward} pts)`
+                  : 'AI tự học hỏi, bắt bài & tùy chỉnh đội hình'}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (isDefenseSimulating) {
+                stopDefenseSimulation();
+              } else {
+                startDefenseSimulation();
+              }
+            }}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition shrink-0 shadow-md flex items-center gap-1 active:scale-95 ${
+              isDefenseSimulating
+                ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse'
+                : 'bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white'
+            }`}
+            title="Kích hoạt AI tự động học hỏi, bắt bài và tùy chỉnh đội hình phòng thủ theo thời gian thực"
+          >
+            <span>{isDefenseSimulating ? 'DỪNG' : 'BẬT GIẢ LẬP'}</span>
+          </button>
+        </div>
+
+        {/* Live Adaptation Status if Defense Simulating */}
+        {isDefenseSimulating && (
+          <div className="mt-2 pt-2 border-t border-red-900/40 flex flex-col gap-1 text-[11px]">
+            <div className="flex items-center justify-between text-slate-300">
+              <span className="text-slate-400">Tỉ lệ chặn (Stop rate):</span>
+              <span className="font-bold text-emerald-400 font-mono">
+                {defenseStats.possessionsDefended > 0
+                  ? `${Math.round((defenseStats.stopsCount / defenseStats.possessionsDefended) * 100)}%`
+                  : '0%'}
+              </span>
+            </div>
+            {defenseCurrentTactic && (
+              <div className="bg-red-950/80 px-2 py-1 rounded text-red-300 font-medium text-[10px] border border-red-800/60 truncate flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+                <span className="truncate">{defenseCurrentTactic}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 1. Defensive System Selector */}
