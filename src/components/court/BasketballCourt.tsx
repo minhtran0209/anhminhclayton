@@ -5,6 +5,7 @@ import { PlayerMarker } from './PlayerMarker';
 import { TacticalPath } from './TacticalPath';
 import { PassingLanesOverlay } from './PassingLanesOverlay';
 import { ZoneOverlay } from './ZoneOverlay';
+import { DefensiveShellOverlay } from './DefensiveShellOverlay';
 import { calculateSpacingIssues, clampPoint, screenToCourt } from '../../engine/geometry/courtGeometry';
 import { Position, Point, ShotResult } from '../../types/basketball';
 import { POSITIONS } from '../../config/constants';
@@ -224,6 +225,12 @@ export const BasketballCourt: React.FC = () => {
 
           {/* Optional Zone Overlay */}
           <ZoneOverlay visible={uiPreferences.showZoneAreas} />
+
+          {/* Defensive Shell Overlay (Imaginary Lines & Team Shape Block) */}
+          <DefensiveShellOverlay
+            defense={defense}
+            visible={uiPreferences.showDefensiveShell}
+          />
 
           {/* Optional Passing Lanes Overlay */}
           <PassingLanesOverlay

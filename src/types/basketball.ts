@@ -140,6 +140,7 @@ export interface UIPreferences {
   showZoneAreas: boolean;
   showHelpLines: boolean;
   showSpacingGuide: boolean;
+  showDefensiveShell: boolean;
   playbackSpeed: number; // 0.25, 0.5, 1, 1.5, 2
   showDebugOverlay: boolean;
 }

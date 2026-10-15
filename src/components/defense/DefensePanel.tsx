@@ -6,15 +6,17 @@ import {
 } from '../../types/basketball';
 import { DEFENSIVE_SYSTEMS, DEFENSE_DESCRIPTIONS } from '../../tactics/defense/defaults';
 import { SLIDER_TOOLTIPS, POSITIONS } from '../../config/constants';
-import { Shield, Info, HelpCircle } from 'lucide-react';
+import { Shield, Info, HelpCircle, Network } from 'lucide-react';
 
 export const DefensePanel: React.FC = () => {
   const {
     defense,
     defensiveSystem,
     defensiveSettings,
+    uiPreferences,
     setDefensiveSystem,
     updateDefensiveSettings,
+    updateUIPreferences,
   } = useGameStore();
 
   const isManToMan = defensiveSystem === 'Man-to-Man';
@@ -34,6 +36,22 @@ export const DefensePanel: React.FC = () => {
             <p className="text-xs text-slate-400">Hệ thống & tham số vị trí</p>
           </div>
         </div>
+
+        {/* Quick Toggle Defensive Shell */}
+        <button
+          onClick={() =>
+            updateUIPreferences({ showDefensiveShell: !uiPreferences.showDefensiveShell })
+          }
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
+            uiPreferences.showDefensiveShell
+              ? 'bg-red-600/30 border-red-500 text-red-200 shadow-sm'
+              : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-slate-200'
+          }`}
+          title="Bật / Tắt vẽ đường nối khối đội hình phòng thủ (Defensive Shell)"
+        >
+          <Network className="w-3.5 h-3.5" />
+          <span>Khối Shell: {uiPreferences.showDefensiveShell ? 'BẬT' : 'TẮT'}</span>
+        </button>
       </div>
 
       {/* 1. Defensive System Selector */}

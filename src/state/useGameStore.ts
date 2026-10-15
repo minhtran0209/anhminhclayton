@@ -222,6 +222,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     showZoneAreas: false,
     showHelpLines: true,
     showSpacingGuide: true,
+    showDefensiveShell: true,
     playbackSpeed: 1,
     showDebugOverlay: false,
   },

@@ -229,6 +229,18 @@ export const TacticalTimeline: React.FC = () => {
             />
             <span>Cảnh báo Spacing</span>
           </label>
+
+          <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white select-none">
+            <input
+              type="checkbox"
+              checked={uiPreferences.showDefensiveShell}
+              onChange={(e) =>
+                updateUIPreferences({ showDefensiveShell: e.target.checked })
+              }
+              className="rounded bg-slate-800 border-slate-700 text-red-500 focus:ring-0"
+            />
+            <span className="text-red-300 font-medium">Khối phòng thủ (Shell)</span>
+          </label>
         </div>
       </div>
 
