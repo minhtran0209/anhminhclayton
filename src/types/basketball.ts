@@ -189,11 +189,39 @@ export interface AIPossessionAnalysis {
   defensiveBreakdown: string;
 }
 
+export interface PlaybookStep {
+  step: number;
+  player: Position;
+  action: OffensiveActionType;
+  targetPlayer?: Position;
+  targetPoint?: Point;
+  triggerDescription: string;
+}
+
+export interface PlaybookPlay {
+  id: string;
+  name: string;
+  vietnameseName: string;
+  formation: OffenseFormation;
+  description: string;
+  expectedWinRate: number;
+  primaryOption: string;
+  keyTriggers: string[];
+  bestAgainst: string;
+  steps: PlaybookStep[];
+}
+
 export interface AIStats {
   possessionsCount: number;
   winsCount: number;
+  pointsScored?: number;
+  threePointersAttempted?: number;
+  threePointersMade?: number;
+  twoPointersAttempted?: number;
+  twoPointersMade?: number;
   turnoversCount?: number;
   totalReward: number;
+  selectedPlayId?: string | 'auto';
   latestWinAnalysis: AIPossessionAnalysis | null;
   historyLog: Array<{ id: string; isWin: boolean; isSteal?: boolean; reward: number; summary: string }>;
 }

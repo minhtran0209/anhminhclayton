@@ -7,6 +7,7 @@ import {
 } from '../../types/basketball';
 import { POSITIONS } from '../../config/constants';
 import { FORMATION_DESCRIPTIONS } from '../../tactics/offense/formations';
+import { OFFENSIVE_PLAYBOOK } from '../../tactics/offense/playbook';
 import {
   Users,
   Play,
@@ -21,6 +22,7 @@ import {
   Sparkles,
   Zap,
   Bot,
+  BookOpen,
 } from 'lucide-react';
 
 export const OffensePanel: React.FC = () => {
@@ -49,6 +51,8 @@ export const OffensePanel: React.FC = () => {
     undoLastPremove,
     clearPremoveQueue,
     executePremoveQueue,
+    setSelectedPlayId,
+    openStatsModal,
   } = useGameStore();
 
   const [passTarget, setPassTarget] = useState<Position>('SG');
@@ -148,6 +152,52 @@ export const OffensePanel: React.FC = () => {
             {isSimulating ? 'DỪNG' : 'CHẠY AI'}
           </button>
         </div>
+      </div>
+
+      {/* AI Playbook Selector (10 High Efficiency Sets) */}
+      <div className="p-3 rounded-xl border border-indigo-500/30 bg-indigo-950/20 text-xs flex flex-col gap-2 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 font-bold text-indigo-300">
+            <BookOpen className="w-4 h-4 text-indigo-400" />
+            <span>AI PLAYBOOK (10 BÀI ĐÁNH)</span>
+          </div>
+          <button
+            type="button"
+            onClick={openStatsModal}
+            className="text-[10px] text-sky-400 hover:text-sky-300 underline font-medium"
+          >
+            Bảng thống kê ↗
+          </button>
+        </div>
+
+        <select
+          value={aiStats.selectedPlayId || 'auto'}
+          onChange={(e) => setSelectedPlayId(e.target.value)}
+          aria-label="Chọn bài đánh trong AI Playbook"
+          className="w-full bg-slate-950 border border-indigo-700/50 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+        >
+          <option value="auto">✨ AI Tự Chọn (Khắc chế đối phương)</option>
+          {OFFENSIVE_PLAYBOOK.map((play, i) => (
+            <option key={play.id} value={play.id}>
+              #{i + 1} {play.vietnameseName} (~{play.expectedWinRate}% win)
+            </option>
+          ))}
+        </select>
+
+        {aiStats.selectedPlayId && aiStats.selectedPlayId !== 'auto' && (
+          <div className="text-[11px] text-slate-300 bg-slate-900/80 p-2 rounded-lg border border-indigo-900/40">
+            {(() => {
+              const play = OFFENSIVE_PLAYBOOK.find((p) => p.id === aiStats.selectedPlayId);
+              if (!play) return null;
+              return (
+                <div className="space-y-1">
+                  <div className="font-semibold text-sky-300">{play.primaryOption}</div>
+                  <div className="text-[10px] text-amber-300/80">🎯 Khắc chế: {play.bestAgainst}</div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </div>
 
       {/* Premove (Play Designer) Section */}

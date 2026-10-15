@@ -27,6 +27,12 @@ export interface AIDecisionResult {
  * Evaluates current court geometry, defensive positions, coverage gaps,
  * adapts to recent failures (adaptive learning), and makes realistic basketball decisions.
  */
+import {
+  getPlaybookPlay,
+  selectBestPlaybookPlay,
+  getPlaybookDecisionForStep,
+} from '../../tactics/offense/playbook';
+
 export function decideNextAIAction(
   offense: Record<Position, Player>,
   defense: Record<Position, Player>,
@@ -35,8 +41,20 @@ export function decideNextAIAction(
   defensiveSettings: DefensiveSettings,
   activeScreen?: { screener: Position; target: Position; point: Point },
   possessionStep: number = 1,
-  adaptiveMemory?: AIAdaptiveMemory
+  adaptiveMemory?: AIAdaptiveMemory,
+  selectedPlayId?: string | 'auto'
 ): AIDecisionResult {
+  // If user or AI chose a playbook play, execute the structured playbook step
+  if (selectedPlayId && selectedPlayId !== 'dynamic') {
+    const play = selectedPlayId === 'auto'
+      ? selectBestPlaybookPlay(defensiveSystem, defensiveSettings)
+      : getPlaybookPlay(selectedPlayId);
+
+    if (play && possessionStep <= play.steps.length) {
+      return getPlaybookDecisionForStep(play, possessionStep, offense, defense, ballHolder);
+    }
+  }
+
   const basket = COURT_DIMENSIONS.BASKET; // { x: 50, y: 8 }
   const ballCoord = offense[ballHolder].coord;
   const distToBasket = distance(ballCoord, basket);

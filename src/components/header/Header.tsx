@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { APP_CONFIG } from '../../config/constants';
 import { useGameStore } from '../../state/useGameStore';
-import { Activity, BookOpen, X, Info, Bot, Sparkles, Shield } from 'lucide-react';
+import { Activity, BookOpen, X, Info, Bot, Sparkles, Shield, BarChart3 } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const [showGuide, setShowGuide] = useState(false);
@@ -18,6 +18,7 @@ export const Header: React.FC = () => {
     isDefenseSimulating,
     startDefenseSimulation,
     stopDefenseSimulation,
+    openStatsModal,
   } = useGameStore();
 
   const ballPos = offense[ballHolder].coord;
@@ -138,6 +139,16 @@ export const Header: React.FC = () => {
             <Shield className="w-4 h-4" />
             <span className="hidden sm:inline">{isDefenseSimulating ? 'Dừng Phòng Thủ' : 'Giả Lập Phòng Thủ'}</span>
             <span className="sm:hidden">{isDefenseSimulating ? 'Dừng PT' : 'Phòng Thủ'}</span>
+          </button>
+
+          {/* Stats Dashboard Modal Button (User Request) */}
+          <button
+            onClick={openStatsModal}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition shadow-md bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/50 shadow-indigo-600/20 active:scale-95"
+            title="Mở bảng thống kê điểm số & hiệu suất AI Tấn công vs Phòng thủ"
+          >
+            <BarChart3 className="w-4 h-4 text-indigo-200" />
+            <span className="hidden sm:inline">Thống Kê</span>
           </button>
 
           {/* Help / Guide Button */}

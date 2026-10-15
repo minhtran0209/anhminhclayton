@@ -136,6 +136,13 @@ interface GameState {
   stopDefenseSimulation: () => void;
   dismissDefenseStopAnalysis: () => void;
   runNextDefensePossession: () => Promise<void>;
+
+  // Playbook & Comprehensive Stats Dashboard Mode
+  isStatsModalOpen: boolean;
+  openStatsModal: () => void;
+  closeStatsModal: () => void;
+  resetStats: () => void;
+  setSelectedPlayId: (playId: string | 'auto') => void;
 }
 
 // Initial Offense from 5-Out
@@ -328,11 +335,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   aiStats: {
     possessionsCount: 0,
     winsCount: 0,
+    pointsScored: 0,
+    threePointersAttempted: 0,
+    threePointersMade: 0,
+    twoPointersAttempted: 0,
+    twoPointersMade: 0,
     turnoversCount: 0,
     totalReward: 0,
+    selectedPlayId: 'auto',
     latestWinAnalysis: null,
     historyLog: [],
   },
+
+  isStatsModalOpen: false,
 
   // AI Tactical Simulation Mode (Defense Focus)
   isDefenseSimulating: false,
@@ -358,6 +373,39 @@ export const useGameStore = create<GameState>((set, get) => ({
   selectPlayer: (player) => {
     set({ selectedPlayer: player });
   },
+
+  openStatsModal: () => set({ isStatsModalOpen: true }),
+  closeStatsModal: () => set({ isStatsModalOpen: false }),
+  setSelectedPlayId: (playId) =>
+    set((state) => ({
+      aiStats: { ...state.aiStats, selectedPlayId: playId },
+    })),
+  resetStats: () =>
+    set({
+      aiStats: {
+        possessionsCount: 0,
+        winsCount: 0,
+        pointsScored: 0,
+        threePointersAttempted: 0,
+        threePointersMade: 0,
+        twoPointersAttempted: 0,
+        twoPointersMade: 0,
+        turnoversCount: 0,
+        totalReward: 0,
+        selectedPlayId: 'auto',
+        latestWinAnalysis: null,
+        historyLog: [],
+      },
+      defenseStats: {
+        possessionsDefended: 0,
+        stopsCount: 0,
+        stealsCount: 0,
+        pointsConceded: 0,
+        totalDefenseReward: 0,
+        latestStopAnalysis: null,
+        historyLog: [],
+      },
+    }),
 
   clearActiveScreen: () => {
     set({ activeScreen: undefined });
@@ -1243,7 +1291,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         curState.defensiveSettings,
         curState.activeScreen,
         step,
-        curState.aiAdaptiveMemory
+        curState.aiAdaptiveMemory,
+        curState.aiStats.selectedPlayId
       );
 
       set({
@@ -1300,6 +1349,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       const newPossessionCount = cur.aiStats.possessionsCount + 1;
       const isSteal = Boolean(finalEvent.isSteal);
       const isWin = !isSteal && finalEvent.shotResult ? finalEvent.shotResult.made : false;
+      const shot = finalEvent.shotResult;
+      const was3P = shot?.shotType === 'three';
+      const isShotMade = Boolean(shot?.made);
+      const pointsScored = isShotMade ? (was3P ? 3 : 2) : 0;
+
+      const new3PA = (cur.aiStats.threePointersAttempted || 0) + (was3P ? 1 : 0);
+      const new3PM = (cur.aiStats.threePointersMade || 0) + (was3P && isShotMade ? 1 : 0);
+      const new2PA = (cur.aiStats.twoPointersAttempted || 0) + (shot && !was3P ? 1 : 0);
+      const new2PM = (cur.aiStats.twoPointersMade || 0) + (shot && !was3P && isShotMade ? 1 : 0);
+      const newTotalPoints = (cur.aiStats.pointsScored || 0) + pointsScored;
 
       const analysis = generateTacticalWinAnalysis(
         possessionEvents,
@@ -1325,7 +1384,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         };
         thoughtText = `⚠️ [HỌC TẬP TỪ THẤT BẠI] Bị ${finalEvent.stealer} cướp bóng ở cự ly ${finalEvent.stealDistance}m! AI tự đổi hướng: Đợt tới ưu tiên chuyền sớm hoặc gọi Screen che chắn!`;
       } else {
-        const was3P = finalEvent.shotResult?.shotType === 'three';
         newMemory = {
           lastFailureType: was3P ? '3PT_MISSED' : 'MID_MISSED',
           lastFailedPlayer: finalEvent.player,
@@ -1340,8 +1398,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({
         aiAdaptiveMemory: newMemory,
         aiStats: {
+          ...cur.aiStats,
           possessionsCount: newPossessionCount,
           winsCount: cur.aiStats.winsCount + (isWin ? 1 : 0),
+          pointsScored: newTotalPoints,
+          threePointersAttempted: new3PA,
+          threePointersMade: new3PM,
+          twoPointersAttempted: new2PA,
+          twoPointersMade: new2PM,
           turnoversCount: (cur.aiStats.turnoversCount || 0) + (isSteal ? 1 : 0),
           totalReward: Math.max(0, cur.aiStats.totalReward + analysis.reward),
           latestWinAnalysis: isWin ? analysis : null,
