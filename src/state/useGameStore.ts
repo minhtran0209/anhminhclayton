@@ -289,7 +289,40 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setBallHolder: (player) => {
-    const { offense, defensiveSystem, defensiveSettings, activeScreen, defense } = get();
+    const state = get();
+
+    if (state.isPremoveMode) {
+      if (player === state.ballHolder) return;
+
+      const fromPlayer = state.ballHolder;
+      const stepNumber = state.premoveQueue.length + 1;
+
+      // Queue a pass action draft in premoveQueue
+      const passDraft: ActionDraft = {
+        player: fromPlayer,
+        action: 'pass',
+        targetPlayer: player,
+        path: [state.offense[fromPlayer].coord, state.offense[player].coord],
+        isValid: true,
+      };
+
+      const newStep: PremoveStep = {
+        id: `premove-${Date.now()}-${stepNumber}`,
+        stepNumber,
+        draft: passDraft,
+        description: `${fromPlayer} – Chuyền bóng cho ${player}`,
+      };
+
+      set({
+        ballHolder: player,
+        // DEFENSE REMAINS 100% COMPLETELY FROZEN!
+        defense: state.defense,
+        premoveQueue: [...state.premoveQueue, newStep],
+      });
+      return;
+    }
+
+    const { offense, defensiveSystem, defensiveSettings, activeScreen, defense } = state;
     const assignments: Record<Position, Position> = {} as any;
     POSITIONS.forEach((p) => {
       if (defense[p].assignment) assignments[p] = defense[p].assignment!;
@@ -318,6 +351,19 @@ export const useGameStore = create<GameState>((set, get) => ({
         coord: { ...coords[pos] },
       };
     });
+
+    if (get().isPremoveMode) {
+      set({
+        currentFormation: formation,
+        baseFormation: formation,
+        customFormation: formation === 'Custom' ? { ...coords } : get().customFormation,
+        offense: updatedOffense,
+        defense: get().defense, // DEFENSE REMAINS 100% COMPLETELY FROZEN!
+        activeScreen: undefined,
+        actionDraft: null,
+      });
+      return;
+    }
 
     const updatedDefense = computeDefense(
       updatedOffense,
@@ -349,6 +395,15 @@ export const useGameStore = create<GameState>((set, get) => ({
         coord,
       },
     };
+
+    if (get().isPremoveMode) {
+      set({
+        customFormation: updatedCustom,
+        offense: updatedOffense,
+        defense, // DEFENSE REMAINS 100% COMPLETELY FROZEN!
+      });
+      return;
+    }
 
     const assignments: Record<Position, Position> = {} as any;
     POSITIONS.forEach((p) => {
@@ -428,6 +483,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   recalculateDefense: () => {
+    if (get().isPremoveMode) return;
     const { offense, ballHolder, defensiveSystem, defensiveSettings, activeScreen, defense } = get();
     const assignments: Record<Position, Position> = {} as any;
     POSITIONS.forEach((p) => {

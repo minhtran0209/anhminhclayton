@@ -415,7 +415,13 @@ export const OffensePanel: React.FC = () => {
                 </select>
               </div>
               <button
-                onClick={() => startDraft('pass', passTarget)}
+                onClick={() => {
+                  if (isPremoveMode) {
+                    setBallHolder(passTarget);
+                  } else {
+                    startDraft('pass', passTarget);
+                  }
+                }}
                 className="w-full mt-1 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-semibold shadow transition active:scale-98"
               >
                 Chuyền cho {passTarget}
