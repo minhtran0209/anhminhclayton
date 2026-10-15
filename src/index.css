@@ -43,3 +43,15 @@ input[type=range] {
   outline: 2px solid #38bdf8;
   outline-offset: 2px;
 }
+
+/* Eliminate browser default focus rectangle on SVG tactical elements */
+svg,
+svg *,
+svg g:focus,
+svg g:focus-visible,
+.player-marker,
+.player-marker:focus,
+.player-marker:focus-visible {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}

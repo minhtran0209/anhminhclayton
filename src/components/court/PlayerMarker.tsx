@@ -128,9 +128,10 @@ export const PlayerMarker: React.FC<PlayerMarkerProps> = ({
   return (
     <g
       ref={groupRef}
-      className={`player-marker cursor-pointer select-none ${
+      className={`player-marker cursor-pointer select-none outline-none focus:outline-none focus-visible:outline-none ${
         isSelected ? 'z-30' : 'z-20'
       }`}
+      style={{ outline: 'none' }}
       data-team={player.team}
       data-position={player.position}
       transform={`translate(${x}, ${y})`}
