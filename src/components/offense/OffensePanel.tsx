@@ -20,6 +20,7 @@ import {
   Layers,
   Sparkles,
   Zap,
+  Bot,
 } from 'lucide-react';
 
 export const OffensePanel: React.FC = () => {
@@ -33,6 +34,10 @@ export const OffensePanel: React.FC = () => {
     isPremoveMode,
     premoveQueue,
     isExecutingPremove,
+    isSimulating,
+    startSimulation,
+    stopSimulation,
+    aiStats,
     selectPlayer,
     setBallHolder,
     setFormation,
@@ -90,6 +95,58 @@ export const OffensePanel: React.FC = () => {
             </h2>
             <p className="text-xs text-slate-400">Kiểm soát bài chạy & đội hình</p>
           </div>
+        </div>
+      </div>
+
+      {/* AI Autonomous Simulation Card */}
+      <div
+        className={`p-2.5 rounded-xl border transition shadow-sm ${
+          isSimulating
+            ? 'border-sky-500/60 bg-sky-950/40 text-white shadow-sky-500/10'
+            : 'border-slate-800 bg-slate-950/60 text-slate-300'
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className={`p-1.5 rounded-lg shrink-0 ${
+                isSimulating ? 'bg-sky-500/20 text-sky-400' : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              <Bot className={`w-4 h-4 ${isSimulating ? 'animate-bounce text-sky-400' : ''}`} />
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-xs flex items-center gap-1.5">
+                <span>Giả lập AI (Simulate)</span>
+                {isSimulating && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-sky-900 text-sky-300 font-mono animate-pulse">
+                    LIVE
+                  </span>
+                )}
+              </div>
+              <div className="text-[10px] text-slate-400 truncate">
+                {isSimulating
+                  ? `Thắng ${aiStats.winsCount}/${aiStats.possessionsCount} (+${aiStats.totalReward} pts)`
+                  : 'AI tự tìm cách hạ gục hàng thủ'}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (isSimulating) {
+                stopSimulation();
+              } else {
+                startSimulation();
+              }
+            }}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition shadow active:scale-95 shrink-0 ${
+              isSimulating
+                ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                : 'bg-gradient-to-r from-emerald-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white'
+            }`}
+          >
+            {isSimulating ? 'DỪNG' : 'CHẠY AI'}
+          </button>
         </div>
       </div>
 

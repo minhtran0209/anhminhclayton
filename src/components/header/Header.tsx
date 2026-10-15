@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { APP_CONFIG } from '../../config/constants';
 import { useGameStore } from '../../state/useGameStore';
-import { Activity, BookOpen, X, Info } from 'lucide-react';
+import { Activity, BookOpen, X, Info, Bot, Sparkles } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const [showGuide, setShowGuide] = useState(false);
@@ -12,6 +12,9 @@ export const Header: React.FC = () => {
     selectedPlayer,
     actionDraft,
     offense,
+    isSimulating,
+    startSimulation,
+    stopSimulation,
   } = useGameStore();
 
   const ballPos = offense[ballHolder].coord;
@@ -90,14 +93,37 @@ export const Header: React.FC = () => {
           )}
         </div>
 
-        {/* Help / Guide Button */}
-        <button
-          onClick={() => setShowGuide(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-slate-300 transition"
-        >
-          <BookOpen className="w-3.5 h-3.5 text-sky-400" />
-          <span className="hidden sm:inline">Hướng dẫn</span>
-        </button>
+        {/* Actions Group: AI Simulate & Guide */}
+        <div className="flex items-center gap-2">
+          {/* AI Simulation Button */}
+          <button
+            onClick={() => {
+              if (isSimulating) {
+                stopSimulation();
+              } else {
+                startSimulation();
+              }
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-md active:scale-95 ${
+              isSimulating
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white animate-pulse border border-red-400 ring-2 ring-red-500/50'
+                : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white border border-emerald-400/50 shadow-emerald-600/20'
+            }`}
+            title="Kích hoạt AI tự động tìm cách chiến thắng hàng phòng thủ đối phương"
+          >
+            <Bot className="w-4 h-4" />
+            <span>{isSimulating ? 'Dừng Giả Lập' : 'Giả Lập AI (Simulate)'}</span>
+          </button>
+
+          {/* Help / Guide Button */}
+          <button
+            onClick={() => setShowGuide(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-slate-300 transition"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline">Hướng dẫn</span>
+          </button>
+        </div>
       </div>
 
       {/* Interactive Guide Modal */}

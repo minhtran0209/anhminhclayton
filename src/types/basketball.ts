@@ -166,3 +166,28 @@ export interface SpacingWarning {
   playerB: Position;
   distance: number;
 }
+
+export interface AIPossessionAnalysis {
+  id: string;
+  timestamp: number;
+  isWin: boolean;
+  title: string;
+  summary: string;
+  explanation: string;
+  keyTactics: string[];
+  contestDistance: number;
+  pointsEarned: number;
+  reward: number;
+  possessionSteps: number;
+  defensiveSystem: DefensiveSystem;
+  defensiveBreakdown: string;
+}
+
+export interface AIStats {
+  possessionsCount: number;
+  winsCount: number;
+  totalReward: number;
+  latestWinAnalysis: AIPossessionAnalysis | null;
+  historyLog: Array<{ id: string; isWin: boolean; reward: number; summary: string }>;
+}
+

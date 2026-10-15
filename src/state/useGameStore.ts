@@ -4,6 +4,8 @@ import {
   POSITIONS,
 } from '../config/constants';
 import {
+  AIPossessionAnalysis,
+  AIStats,
   ActionDraft,
   DefensiveSettings,
   DefensiveSystem,
@@ -17,6 +19,7 @@ import {
   TacticalEvent,
   UIPreferences,
 } from '../types/basketball';
+import { decideNextAIAction, generateTacticalWinAnalysis } from '../engine/simulation/offensiveAI';
 import {
   FORMATION_DESCRIPTIONS,
   OFFENSIVE_FORMATIONS,
@@ -100,6 +103,19 @@ interface GameState {
   undoLastPremove: () => void;
   clearPremoveQueue: () => void;
   executePremoveQueue: () => Promise<void>;
+
+  // AI Tactical Simulation Mode
+  isSimulating: boolean;
+  isSimulationPaused: boolean;
+  aiCurrentThought: string;
+  aiCurrentTactic: string;
+  aiStats: AIStats;
+  startSimulation: () => void;
+  pauseSimulation: () => void;
+  resumeSimulation: () => void;
+  stopSimulation: () => void;
+  dismissWinAnalysis: () => void;
+  runNextAIPossession: () => Promise<void>;
 }
 
 // Initial Offense from 5-Out
@@ -243,6 +259,8 @@ const initialDefense = computeDefense(
 
 const savedCustom = loadSavedCustomFormation() || { ...OFFENSIVE_FORMATIONS['5-Out'] };
 
+let currentSimulationSession = 0;
+
 export const useGameStore = create<GameState>((set, get) => ({
   offense: initialOffense,
   defense: initialDefense,
@@ -279,6 +297,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   premoveQueue: [],
   premoveInitialSnapshot: null,
   isExecutingPremove: false,
+
+  // AI Tactical Simulation Mode
+  isSimulating: false,
+  isSimulationPaused: false,
+  aiCurrentThought: '',
+  aiCurrentTactic: '',
+  aiStats: {
+    possessionsCount: 0,
+    winsCount: 0,
+    totalReward: 0,
+    latestWinAnalysis: null,
+    historyLog: [],
+  },
 
   selectPlayer: (player) => {
     set({ selectedPlayer: player });
@@ -1092,5 +1123,173 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({
       uiPreferences: { ...state.uiPreferences, ...prefs },
     }));
+  },
+
+  startSimulation: () => {
+    const sessionId = ++currentSimulationSession;
+    set({
+      isSimulating: true,
+      isSimulationPaused: false,
+      aiCurrentThought: 'Khởi động mô phỏng: AI đang phân tích sơ đồ phòng thủ đối phương...',
+      aiCurrentTactic: 'Khởi Tạo Trận Đấu',
+    });
+    get().runNextAIPossession();
+  },
+
+  pauseSimulation: () => {
+    set({
+      isSimulationPaused: true,
+      aiCurrentThought: 'Đã tạm dừng mô phỏng. Bấm Tiếp tục để chạy tiếp.',
+    });
+  },
+
+  resumeSimulation: () => {
+    set({ isSimulationPaused: false });
+    get().runNextAIPossession();
+  },
+
+  stopSimulation: () => {
+    currentSimulationSession++;
+    set({
+      isSimulating: false,
+      isSimulationPaused: false,
+      aiCurrentThought: '',
+      aiCurrentTactic: '',
+      selectedPlayer: null,
+    });
+  },
+
+  dismissWinAnalysis: () => {
+    set((state) => ({
+      aiStats: {
+        ...state.aiStats,
+        latestWinAnalysis: null,
+      },
+    }));
+    if (get().isSimulating && !get().isSimulationPaused) {
+      get().runNextAIPossession();
+    }
+  },
+
+  runNextAIPossession: async () => {
+    const sessionId = currentSimulationSession;
+    const state = get();
+    if (!state.isSimulating) return;
+
+    // Reset positions to base formation for fresh possession
+    get().resetPositions();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    if (sessionId !== currentSimulationSession || !get().isSimulating || get().isSimulationPaused) return;
+
+    const possessionEvents: TacticalEvent[] = [];
+    const speed = get().uiPreferences.playbackSpeed || 1;
+    const stepDelay = Math.round(1300 / Math.max(speed, 0.25));
+
+    let finalEvent: TacticalEvent | null = null;
+
+    for (let step = 1; step <= 5; step++) {
+      const curState = get();
+      if (sessionId !== currentSimulationSession || !curState.isSimulating || curState.isSimulationPaused) return;
+
+      const decision = decideNextAIAction(
+        curState.offense,
+        curState.defense,
+        curState.ballHolder,
+        curState.defensiveSystem,
+        curState.defensiveSettings,
+        curState.activeScreen,
+        step
+      );
+
+      set({
+        aiCurrentThought: decision.thought,
+        aiCurrentTactic: decision.tacticName,
+        selectedPlayer: decision.draft.player,
+      });
+
+      // Execute AI decision
+      const curSnapshot = createSnapshot(curState);
+      const stepNumber = curState.timeline.length + 1;
+
+      const { updatedOffense, updatedDefense, updatedBallHolder, event, activeScreen } =
+        executeOffensiveAction(decision.draft, curSnapshot, stepNumber);
+
+      possessionEvents.push(event);
+
+      set({
+        offense: updatedOffense,
+        defense: updatedDefense,
+        ballHolder: updatedBallHolder,
+        activeScreen,
+        timeline: [...curState.timeline, event],
+        history: {
+          past: [...curState.history.past, curSnapshot],
+          future: [],
+        },
+        playbackStep: curState.timeline.length,
+      });
+
+      // Check if shot or layup was attempted
+      if (
+        decision.isFinishingAttempt ||
+        event.shotResult ||
+        decision.draft.action === 'shoot' ||
+        decision.draft.action === 'layup' ||
+        decision.draft.action === 'shoot_off_screen'
+      ) {
+        finalEvent = event;
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, stepDelay));
+      if (sessionId !== currentSimulationSession || !get().isSimulating || get().isSimulationPaused) return;
+    }
+
+    if (!finalEvent && possessionEvents.length > 0) {
+      finalEvent = possessionEvents[possessionEvents.length - 1];
+    }
+
+    if (finalEvent) {
+      const cur = get();
+      const newPossessionCount = cur.aiStats.possessionsCount + 1;
+      const isWin = finalEvent.shotResult ? finalEvent.shotResult.made : false;
+
+      const analysis = generateTacticalWinAnalysis(
+        possessionEvents,
+        finalEvent,
+        cur.defensiveSystem,
+        cur.defensiveSettings,
+        newPossessionCount
+      );
+
+      set({
+        aiStats: {
+          possessionsCount: newPossessionCount,
+          winsCount: cur.aiStats.winsCount + (isWin ? 1 : 0),
+          totalReward: cur.aiStats.totalReward + analysis.reward,
+          latestWinAnalysis: isWin ? analysis : null,
+          historyLog: [
+            {
+              id: analysis.id,
+              isWin,
+              reward: analysis.reward,
+              summary: `${isWin ? '✅ THẮNG' : '❌ HỤT'}: ${analysis.title} (+${analysis.pointsEarned}đ, thưởng +${analysis.reward} pts)`,
+            },
+            ...cur.aiStats.historyLog.slice(0, 19),
+          ],
+        },
+        aiCurrentThought: isWin
+          ? `🏆 CHIẾN THẮNG! ${analysis.title} (Thưởng: +${analysis.reward} pts)`
+          : `Cú ném không vào rổ (${finalEvent.shotResult?.probability || 45}%). AI tích lũy kinh nghiệm +${analysis.reward} pts. Đang chuẩn bị bài chạy mới...`,
+      });
+
+      // If missed shot and still simulating, continue to next possession after short delay
+      if (!isWin) {
+        await new Promise((resolve) => setTimeout(resolve, 1800));
+        if (sessionId === currentSimulationSession && get().isSimulating && !get().isSimulationPaused) {
+          get().runNextAIPossession();
+        }
+      }
+    }
   },
 }));

@@ -11,6 +11,7 @@ import { calculateSpacingIssues, clampPoint, screenToCourt } from '../../engine/
 import { Position, Point, ShotResult } from '../../types/basketball';
 import { POSITIONS } from '../../config/constants';
 import { Check, X, AlertTriangle, Gauge, Zap, Play, Undo2 } from 'lucide-react';
+import { AISimulationHUD, AIWinAnalysisModal } from '../simulation';
 
 export const BasketballCourt: React.FC = () => {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -27,6 +28,7 @@ export const BasketballCourt: React.FC = () => {
     isPremoveMode,
     premoveQueue,
     isExecutingPremove,
+    isSimulating,
     selectPlayer,
     updateCustomPlayerCoord,
     addDraftPoint,
@@ -217,10 +219,16 @@ export const BasketballCourt: React.FC = () => {
 
   return (
     <div className="relative flex flex-col items-center justify-center w-full h-full p-2 select-none">
+      {/* AI Win Analysis Celebration Modal */}
+      <AIWinAnalysisModal />
+
       {/* SVG Container with responsive aspect ratio */}
       <div className="relative w-full max-w-[680px] aspect-square rounded-xl overflow-hidden shadow-2xl border border-slate-700 bg-slate-950 flex items-center justify-center">
+        {/* Floating AI Simulation HUD */}
+        <AISimulationHUD />
+
         {/* Floating Premove Status Banner on Court */}
-        {isPremoveMode && (
+        {isPremoveMode && !isSimulating && (
           <div className="absolute top-2 left-2 right-2 z-30 flex items-center justify-between bg-slate-900/95 border border-emerald-500/60 p-2 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in">
             <div className="flex items-center gap-2">
               <span className="flex h-2.5 w-2.5 relative">
