@@ -118,4 +118,58 @@ describe('AI Tactical Simulation Engine', () => {
     store.stopSimulation();
     expect(useGameStore.getState().isSimulating).toBe(false);
   });
+
+  it('Requirement 2: Adaptive AI switches direction away from 3PT on previous 3PT miss', () => {
+    const decision = decideNextAIAction(
+      offense,
+      defense,
+      'PG',
+      'Man-to-Man',
+      DEFAULT_DEFENSIVE_SETTINGS,
+      undefined,
+      1,
+      {
+        lastFailureType: '3PT_MISSED',
+        consecutiveFailures: 1,
+        favoredTactic: 'pick_and_roll',
+      }
+    );
+
+    expect(decision.draft.action).not.toBe('shoot');
+    expect(decision.thought).toContain('Đợt trước ném 3 hụt');
+    expect(decision.tacticName).toContain('Pick & Roll');
+  });
+
+  it('Requirement 2: Adaptive AI makes immediate pass to escape pressure after steal turnover', () => {
+    // Tight defender on PG
+    const tightDef = createMockPlayers(
+      {
+        PG: { x: 50, y: 76 }, // 2m from PG at (50, 78)
+        SG: { x: 30, y: 50 },
+        SF: { x: 70, y: 50 },
+        PF: { x: 30, y: 20 },
+        C: { x: 50, y: 20 },
+      },
+      'defense'
+    );
+
+    const decision = decideNextAIAction(
+      offense,
+      tightDef,
+      'PG',
+      'Man-to-Man',
+      DEFAULT_DEFENSIVE_SETTINGS,
+      undefined,
+      1,
+      {
+        lastFailureType: 'STEAL_TURNOVER',
+        consecutiveFailures: 1,
+        favoredTactic: 'perimeter_ball_movement',
+      }
+    );
+
+    expect(decision.draft.action).toBe('pass');
+    expect(decision.thought).toContain('Tránh bẫy cướp bóng');
+    expect(decision.tacticName).toContain('Chuyền Nhanh Thoát Áp Lực Steal');
+  });
 });

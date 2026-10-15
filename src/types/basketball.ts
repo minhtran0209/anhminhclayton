@@ -19,7 +19,8 @@ export type DefenderState =
   | 'RECOVER'
   | 'ZONE_GUARD'
   | 'TRACK_CUTTER'
-  | 'SCREENED';
+  | 'SCREENED'
+  | 'PRESSURE';
 
 export interface Player {
   id: string; // e.g. "offense-PG", "defense-C"
@@ -129,6 +130,9 @@ export interface TacticalEvent {
   timestamp: number;
   explanations?: Partial<Record<Position, string>>;
   shotResult?: ShotResult;
+  isSteal?: boolean;
+  stealer?: Position;
+  stealDistance?: number;
 }
 
 export interface GameSnapshot {
@@ -171,6 +175,8 @@ export interface AIPossessionAnalysis {
   id: string;
   timestamp: number;
   isWin: boolean;
+  isSteal?: boolean;
+  stealer?: Position;
   title: string;
   summary: string;
   explanation: string;
@@ -186,8 +192,17 @@ export interface AIPossessionAnalysis {
 export interface AIStats {
   possessionsCount: number;
   winsCount: number;
+  turnoversCount?: number;
   totalReward: number;
   latestWinAnalysis: AIPossessionAnalysis | null;
-  historyLog: Array<{ id: string; isWin: boolean; reward: number; summary: string }>;
+  historyLog: Array<{ id: string; isWin: boolean; isSteal?: boolean; reward: number; summary: string }>;
 }
+
+export interface AIAdaptiveMemory {
+  lastFailureType?: '3PT_MISSED' | 'MID_MISSED' | 'STEAL_TURNOVER' | 'TIMEOUT';
+  lastFailedPlayer?: Position;
+  consecutiveFailures: number;
+  favoredTactic?: 'inside_attack' | 'pick_and_roll' | 'drive_and_kick' | 'perimeter_ball_movement' | 'backdoor_cuts';
+}
+
 

@@ -132,6 +132,14 @@ export const AISimulationHUD: React.FC = () => {
             <span className="text-slate-400">
               Thắng: <strong className="text-emerald-400 font-mono">{aiStats.winsCount}</strong> ({winRate}%)
             </span>
+            {aiStats.turnoversCount !== undefined && aiStats.turnoversCount > 0 && (
+              <>
+                <span className="text-slate-700">|</span>
+                <span className="text-rose-400">
+                  Mất bóng: <strong className="font-mono text-rose-300">{aiStats.turnoversCount}</strong>
+                </span>
+              </>
+            )}
             <span className="text-slate-700">|</span>
             <span className="text-amber-400 font-bold font-mono">
               +{aiStats.totalReward} pts

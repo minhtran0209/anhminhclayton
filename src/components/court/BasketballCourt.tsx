@@ -10,7 +10,7 @@ import { PremoveQueueOverlay } from './PremoveQueueOverlay';
 import { calculateSpacingIssues, clampPoint, screenToCourt } from '../../engine/geometry/courtGeometry';
 import { Position, Point, ShotResult } from '../../types/basketball';
 import { POSITIONS } from '../../config/constants';
-import { Check, X, AlertTriangle, Gauge, Zap, Play, Undo2 } from 'lucide-react';
+import { Check, X, AlertTriangle, Gauge, Zap, Play, Undo2, Minimize2, Maximize2 } from 'lucide-react';
 import { AISimulationHUD, AIWinAnalysisModal } from '../simulation';
 
 export const BasketballCourt: React.FC = () => {
@@ -120,6 +120,7 @@ export const BasketballCourt: React.FC = () => {
   const flyingBallRef = useRef<SVGGElement | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
   const [shotFeedback, setShotFeedback] = useState<ShotResult | null>(null);
+  const [isShotFeedbackMinimized, setIsShotFeedbackMinimized] = useState(false);
 
   useEffect(() => {
     if (!lastEvent || lastEvent.id === lastEventIdRef.current) return;
@@ -127,6 +128,7 @@ export const BasketballCourt: React.FC = () => {
 
     if (lastEvent.shotResult) {
       setShotFeedback(lastEvent.shotResult);
+      setIsShotFeedbackMinimized(false);
       const timer = setTimeout(() => {
         setShotFeedback((prev) => (prev === lastEvent.shotResult ? null : prev));
       }, 5500);
@@ -467,7 +469,35 @@ export const BasketballCourt: React.FC = () => {
         </svg>
 
         {/* Floating Shot Result Feedback Banner */}
-        {shotFeedback && (
+        {shotFeedback && isShotFeedbackMinimized && (
+          <div
+            className={`absolute top-3 right-3 z-40 px-2.5 py-1.5 rounded-lg shadow-xl border backdrop-blur-md flex items-center gap-2 text-xs font-bold animate-in fade-in ${
+              shotFeedback.made
+                ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200'
+                : 'bg-rose-950/90 border-rose-500 text-rose-200'
+            }`}
+          >
+            <span>{shotFeedback.made ? `🎯 VÀO RỔ +${shotFeedback.points}Đ` : '❌ KHÔNG VÀO'}</span>
+            <button
+              type="button"
+              onClick={() => setIsShotFeedbackMinimized(false)}
+              className="p-0.5 text-white/70 hover:text-white rounded"
+              title="Mở rộng chi tiết cú ném"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShotFeedback(null)}
+              className="p-0.5 text-white/70 hover:text-white rounded"
+              title="Đóng thông báo"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {shotFeedback && !isShotFeedbackMinimized && (
           <div
             className={`absolute top-3 right-3 z-40 max-w-[270px] p-3 rounded-lg shadow-2xl border backdrop-blur-md transition-all animate-in fade-in zoom-in-95 duration-200 ${
               shotFeedback.made
@@ -484,14 +514,24 @@ export const BasketballCourt: React.FC = () => {
                   </span>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => setShotFeedback(null)}
-                className="text-white/60 hover:text-white p-0.5 rounded transition"
-                title="Đóng thông báo"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setIsShotFeedbackMinimized(true)}
+                  className="text-white/60 hover:text-white p-0.5 rounded transition"
+                  title="Thu nhỏ thông báo"
+                >
+                  <Minimize2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShotFeedback(null)}
+                  className="text-white/60 hover:text-white p-0.5 rounded transition"
+                  title="Đóng thông báo"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             <div className="text-xs space-y-1">

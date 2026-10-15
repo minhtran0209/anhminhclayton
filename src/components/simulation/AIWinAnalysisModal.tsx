@@ -12,6 +12,8 @@ import {
   TrendingUp,
   BrainCircuit,
   Eye,
+  Minimize2,
+  Maximize2,
 } from 'lucide-react';
 
 export const AIWinAnalysisModal: React.FC = () => {
@@ -25,6 +27,7 @@ export const AIWinAnalysisModal: React.FC = () => {
   const analysis = aiStats.latestWinAnalysis;
   const [timeLeft, setTimeLeft] = useState(6);
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(true);
+  const [isMinimized, setIsMinimized] = useState(false);
 
   // Auto advance timer
   useEffect(() => {
@@ -47,6 +50,40 @@ export const AIWinAnalysisModal: React.FC = () => {
 
   if (!analysis) return null;
 
+  // Minimized floating banner in corner
+  if (isMinimized) {
+    return (
+      <div className="fixed bottom-4 right-4 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-900/95 border-2 border-amber-500 shadow-2xl backdrop-blur-md text-white text-xs">
+          <Trophy className="w-4 h-4 text-amber-400 shrink-0 animate-bounce" />
+          <div className="flex flex-col min-w-0">
+            <span className="font-extrabold text-[11px] text-amber-300 truncate max-w-[220px]">
+              AI Thắng: {analysis.title}
+            </span>
+            <span className="text-[10px] text-slate-300">
+              +{analysis.reward} pts | +{analysis.pointsEarned}đ
+              {autoAdvanceEnabled && ` (Lượt mới sau ${timeLeft}s)`}
+            </span>
+          </div>
+          <button
+            onClick={() => setIsMinimized(false)}
+            className="p-1 hover:bg-slate-800 text-sky-400 hover:text-sky-300 rounded transition ml-1"
+            title="Mở rộng bảng phân tích"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={dismissWinAnalysis}
+            className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded transition"
+            title="Đóng thông báo"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
       <div className="bg-slate-900 border-2 border-amber-500/80 rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col my-auto border-t-amber-400">
@@ -67,13 +104,22 @@ export const AIWinAnalysisModal: React.FC = () => {
               </div>
             </div>
 
-            <button
-              onClick={dismissWinAnalysis}
-              className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition"
-              title="Đóng bảng phân tích"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setIsMinimized(true)}
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition"
+                title="Thu nhỏ thông báo"
+              >
+                <Minimize2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={dismissWinAnalysis}
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition"
+                title="Đóng bảng phân tích"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           {/* Reward Badges Bar */}

@@ -424,6 +424,9 @@ describe('8. Shot & Layup Contest Calculations', () => {
       offenseCoords[p] = offense[p].coord;
     });
 
+    // Set PG at top of 3-point arc (50, 50) - valid arc distance (dist to rim is 42)
+    offenseCoords.PG = { x: 50, y: 50 };
+
     // Case 1: Wide Open 3PT (defenders pushed back into paint)
     const deepPaintDefense = {} as Record<Position, { coord: { x: number; y: number } }>;
     POSITIONS.forEach((p) => {
@@ -433,7 +436,7 @@ describe('8. Shot & Layup Contest Calculations', () => {
     const wideOpenSnapshot = {
       offense: offenseCoords,
       defense: deepPaintDefense as any,
-      ballHolder: 'PG' as Position, // at (50, 80), basket is at (50, 8) -> dist is 72, defenders at y=15 -> dist is 65
+      ballHolder: 'PG' as Position, // at (50, 50), basket is at (50, 8) -> dist is 42
       currentFormation: '5-Out' as const,
       defensiveSystem: 'Man-to-Man' as const,
       defensiveSettings: DEFAULT_DEFENSIVE_SETTINGS,
@@ -457,9 +460,9 @@ describe('8. Shot & Layup Contest Calculations', () => {
     expect(shot.probability).toBe(46);
     expect(shot.contestDistance).toBeGreaterThan(11);
 
-    // Case 2: Heavily Contested (defender right in PG face, e.g. dist 1.5)
+    // Case 2: Heavily Contested at arc (defender right in PG face, e.g. dist 1.5)
     const tightDefense = { ...deepPaintDefense };
-    tightDefense.PG = { coord: { x: 50, y: 78.5 } }; // 1.5 units from PG (50, 80)
+    tightDefense.PG = { coord: { x: 50, y: 48.5 } }; // 1.5 units from PG (50, 50)
 
     const smotheredSnapshot = {
       ...wideOpenSnapshot,
@@ -479,9 +482,47 @@ describe('8. Shot & Layup Contest Calculations', () => {
     expect(smotheredResult.event.shotResult).toBeDefined();
     const smotheredShot = smotheredResult.event.shotResult!;
     expect(smotheredShot.contestLevel).toBe('HEAVILY_CONTESTED');
-    expect(smotheredShot.probability).toBe(14);
+    expect(smotheredShot.probability).toBeLessThanOrEqual(10);
     expect(smotheredShot.contestDefender).toBe('PG');
     expect(smotheredShot.contestDistance).toBeLessThan(3.8);
+
+    // Case 3: Contested 3PT at arc (capped at 20%)
+    const contestedDefense = { ...deepPaintDefense };
+    contestedDefense.PG = { coord: { x: 50, y: 45.5 } }; // 4.5 units from PG (between 3.8 and 7)
+
+    const contestedSnapshot = {
+      ...wideOpenSnapshot,
+      defense: contestedDefense as any,
+    };
+
+    const contestedResult = executeOffensiveAction(
+      {
+        player: 'PG',
+        action: 'shoot',
+        isValid: true,
+      },
+      contestedSnapshot,
+      3
+    );
+    expect(contestedResult.event.shotResult!.contestLevel).toBe('CONTESTED');
+    expect(contestedResult.event.shotResult!.probability).toBe(20);
+
+    // Case 4: Deep 3PT far from FT line (e.g. at 50, 80) -> probability must drop under 5% (< 5%)
+    const deepOffense = { ...offenseCoords, PG: { x: 50, y: 80 } };
+    const deepSnapshot = {
+      ...wideOpenSnapshot,
+      offense: deepOffense,
+    };
+    const deepResult = executeOffensiveAction(
+      {
+        player: 'PG',
+        action: 'shoot',
+        isValid: true,
+      },
+      deepSnapshot,
+      4
+    );
+    expect(deepResult.event.shotResult!.probability).toBeLessThan(5);
   });
 
   it('Layup: cuts directly to rim, evaluates rim protection contest, awards 2 points if made', () => {
@@ -645,19 +686,22 @@ describe('9. Pick & Roll Screen Exploitation', () => {
       offenseCoords[p] = offense[p].coord;
     });
 
+    // Place PG and screen at top of 3PT arc (50, 50)
+    offenseCoords.PG = { x: 50, y: 50 };
+
     const activeScreen = {
       screener: 'C' as Position,
       target: 'PG' as Position,
-      point: { x: 44, y: 81 },
+      point: { x: 44, y: 52 },
     };
 
-    // Man to man with def-PG tight on PG (50, 78) and def-C dropping
+    // Man to man with def-PG tight on PG (50, 50) and def-C dropping
     const defense = {
-      PG: { coord: { x: 50, y: 78 } },
+      PG: { coord: { x: 50, y: 50 } },
       SG: { coord: { x: 20, y: 60 } },
       SF: { coord: { x: 80, y: 60 } },
       PF: { coord: { x: 30, y: 70 } },
-      C: { coord: { x: 50, y: 50 } }, // dropping big
+      C: { coord: { x: 50, y: 35 } }, // dropping big
     };
 
     const snapshot = {
@@ -688,6 +732,23 @@ describe('9. Pick & Roll Screen Exploitation', () => {
     expect(result.event.description).toContain('Ném rổ sau Screen');
     // Active screen is consumed after shot
     expect(result.activeScreen).toBeUndefined();
+
+    // Verify deep shoot_off_screen far from FT line (e.g. from 50, 78) is capped under 5%
+    const deepSnapshot = {
+      ...snapshot,
+      offense: { ...offenseCoords, PG: { x: 50, y: 78 } },
+      activeScreen: { ...activeScreen, point: { x: 44, y: 80 } },
+    };
+    const deepResult = executeOffensiveAction(
+      {
+        player: 'PG',
+        action: 'shoot_off_screen',
+        isValid: true,
+      },
+      deepSnapshot,
+      2
+    );
+    expect(deepResult.event.shotResult!.probability).toBeLessThan(5);
   });
 
   it('calculateScreenPosition: plants screen directly on the DEFENDER, not behind offensive teammate', () => {

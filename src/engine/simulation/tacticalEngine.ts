@@ -1,5 +1,5 @@
 import { COURT_DIMENSIONS } from '../../config/constants';
-import { calculateScreenPosition, clampPoint, distance, lerp } from '../geometry/courtGeometry';
+import { calculateScreenPosition, clampPoint, distance, lerp, pointToSegmentDistance } from '../geometry/courtGeometry';
 import {
   ActionDraft,
   GameSnapshot,
@@ -40,6 +40,104 @@ export function executeOffensiveAction(
   const playerCoord = { ...offense[player] };
   let finalCoord = playerCoord;
   let description = '';
+
+  // 0. Defense Steal Check (Requirement 3: Cướp bóng dựa trên khoảng cách giữa hậu vệ và người giữ bóng)
+  const isBallAction = player === ballHolder;
+  const hasScreenShield = Boolean(activeScreen && activeScreen.target === player);
+  let isStealOccurred = false;
+  let stealerDefender: Position = 'PG';
+  let stealDist = 999;
+
+  if (isBallAction && action !== 'shoot' && action !== 'shoot_off_screen' && action !== 'layup') {
+    (Object.keys(currentSnapshot.defense) as Position[]).forEach((defPos) => {
+      const defCoord = currentSnapshot.defense[defPos].coord;
+      const d = distance(playerCoord, defCoord);
+      if (d < stealDist) {
+        stealDist = d;
+        stealerDefender = defPos;
+      }
+    });
+
+    const pressure = currentSnapshot.defensiveSettings?.pressure ?? 50;
+    let stealChance = 0;
+
+    if (!hasScreenShield) {
+      if (stealDist <= 2.2) {
+        // Áp sát cực gần (< 2.2m): tỉ lệ cướp bóng cao từ 8% đến 18% tuỳ áp lực
+        stealChance = Math.round(8 + (pressure / 100) * 10);
+      } else if (stealDist <= 3.8) {
+        // Cự ly kèm rát (2.2m - 3.8m): tỉ lệ cướp bóng 3% đến 8%
+        stealChance = Math.round(3 + (pressure / 100) * 5);
+      } else if (stealDist <= 5.0) {
+        // Cự ly trung bình: 0% - 2%
+        stealChance = Math.round((pressure / 100) * 2);
+      }
+    }
+
+    // Nếu chuyền bóng (pass), kiểm tra xem có hậu vệ đứng chắn trên đường chuyền không
+    if (action === 'pass' && targetPlayer && targetPlayer !== player) {
+      const targetCoord = offense[targetPlayer];
+      (Object.keys(currentSnapshot.defense) as Position[]).forEach((defPos) => {
+        const defCoord = currentSnapshot.defense[defPos].coord;
+        const dLine = pointToSegmentDistance(defCoord, playerCoord, targetCoord);
+        if (dLine <= 2.4) {
+          stealChance = Math.max(stealChance, 16 + Math.round((pressure / 100) * 8));
+          stealerDefender = defPos;
+          stealDist = Math.min(stealDist, dLine);
+        }
+      });
+    }
+
+    if (stealChance > 0 && Math.random() * 100 < stealChance) {
+      isStealOccurred = true;
+    }
+  }
+
+  if (isStealOccurred) {
+    const formattedStealDist = Math.round(stealDist * 10) / 10;
+    description = `⚠️ [CƯỚP BÓNG / STEAL] Hậu vệ ${stealerDefender} áp sát ở cự ly ${formattedStealDist}m đã thò tay cướp bóng thành công từ ${player}! Mất quyền kiểm soát bóng!`;
+    const event: TacticalEvent = {
+      id: `event-${stepNumber}-${Date.now()}`,
+      stepNumber,
+      player,
+      action,
+      targetPlayer,
+      path: [playerCoord],
+      description,
+      timestamp: Date.now(),
+      isSteal: true,
+      stealer: stealerDefender,
+      stealDistance: formattedStealDist,
+    };
+
+    const offensePlayers: Record<Position, Player> = {} as any;
+    const defensePlayers: Record<Position, Player> = {} as any;
+    (Object.keys(offense) as Position[]).forEach((pos) => {
+      offensePlayers[pos] = {
+        id: `offense-${pos}`,
+        team: 'offense',
+        position: pos,
+        coord: offense[pos],
+      };
+      defensePlayers[pos] = {
+        id: `defense-${pos}`,
+        team: 'defense',
+        position: pos,
+        coord: defense[pos].coord,
+        state: pos === stealerDefender ? 'PRESSURE' : defense[pos].state,
+        assignment: defense[pos].assignment,
+        explanation: defense[pos].explanation,
+      };
+    });
+
+    return {
+      updatedOffense: offensePlayers,
+      updatedDefense: defensePlayers,
+      updatedBallHolder: stealerDefender,
+      event,
+      activeScreen,
+    };
+  }
 
   // 1. Process Offensive Action Mechanics
   switch (action) {
@@ -141,11 +239,25 @@ export function executeOffensiveAction(
       } else if (minDefDist >= 3.8) {
         contestLevel = 'CONTESTED';
         if (!hasScreenShield) contestLabel = `Bị kèm (${closestDefender} Contest)`;
-        probability = is3Pt ? 25 : 34;
+        probability = is3Pt ? 20 : 34;
       } else {
         contestLevel = 'HEAVILY_CONTESTED';
         if (!hasScreenShield) contestLabel = `Bị áp sát (${closestDefender} Smothered)`;
-        probability = is3Pt ? 14 : 20;
+        probability = is3Pt ? 8 : 18;
+      }
+
+      // Requirement 1: Ném 3 điểm cách xa vạch ném phạt (cự ly sâu: distToBasket > 52 hoặc y > 58) -> Tỉ lệ vào chỉ dưới 5%
+      // Ngoài ra nếu ném 3 nhưng bị contest -> Tỉ lệ vào chỉ ở mức 20%
+      if (is3Pt) {
+        const isFarFromFT = distToBasket > 52 || playerCoord.y > 58;
+        if (isFarFromFT) {
+          probability = Math.min(probability, 4); // dưới 5%
+          contestLabel += ` [Cự ly xa ngoài vạch ném phạt ${Math.round(distToBasket)}m: Tỉ lệ < 5%]`;
+        } else if (contestLevel === 'CONTESTED') {
+          probability = Math.min(probability, 20); // mức 20%
+        } else if (contestLevel === 'HEAVILY_CONTESTED') {
+          probability = Math.min(probability, 8); // dưới 10%
+        }
       }
 
       const roll = Math.random() * 100;
@@ -200,6 +312,17 @@ export function executeOffensiveAction(
         contestLevel = 'WIDE_OPEN';
         contestLabel = `Thoát người hoàn toàn sau Screen của ${screener}`;
         probability = is3Pt ? 52 : 62;
+      }
+
+      // Requirement 1:
+      if (is3Pt) {
+        const isFarFromFT = distToBasket > 52 || playerCoord.y > 58;
+        if (isFarFromFT) {
+          probability = Math.min(probability, 4); // dưới 5%
+          contestLabel += ` [Cự ly xa ngoài vạch ném phạt ${Math.round(distToBasket)}m: Tỉ lệ < 5%]`;
+        } else if (minDefDist < 6.5) {
+          probability = Math.min(probability, 20); // tối đa 20% khi bị contest
+        }
       }
 
       const roll = Math.random() * 100;

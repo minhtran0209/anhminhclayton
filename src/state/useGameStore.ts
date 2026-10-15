@@ -4,6 +4,7 @@ import {
   POSITIONS,
 } from '../config/constants';
 import {
+  AIAdaptiveMemory,
   AIPossessionAnalysis,
   AIStats,
   ActionDraft,
@@ -109,6 +110,7 @@ interface GameState {
   isSimulationPaused: boolean;
   aiCurrentThought: string;
   aiCurrentTactic: string;
+  aiAdaptiveMemory: AIAdaptiveMemory;
   aiStats: AIStats;
   startSimulation: () => void;
   pauseSimulation: () => void;
@@ -303,9 +305,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   isSimulationPaused: false,
   aiCurrentThought: '',
   aiCurrentTactic: '',
+  aiAdaptiveMemory: { consecutiveFailures: 0 },
   aiStats: {
     possessionsCount: 0,
     winsCount: 0,
+    turnoversCount: 0,
     totalReward: 0,
     latestWinAnalysis: null,
     historyLog: [],
@@ -1198,7 +1202,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         curState.defensiveSystem,
         curState.defensiveSettings,
         curState.activeScreen,
-        step
+        step,
+        curState.aiAdaptiveMemory
       );
 
       set({
@@ -1229,8 +1234,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         playbackStep: curState.timeline.length,
       });
 
-      // Check if shot or layup was attempted
+      // Check if steal occurred, or shot or layup was attempted
       if (
+        event.isSteal ||
         decision.isFinishingAttempt ||
         event.shotResult ||
         decision.draft.action === 'shoot' ||
@@ -1252,7 +1258,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (finalEvent) {
       const cur = get();
       const newPossessionCount = cur.aiStats.possessionsCount + 1;
-      const isWin = finalEvent.shotResult ? finalEvent.shotResult.made : false;
+      const isSteal = Boolean(finalEvent.isSteal);
+      const isWin = !isSteal && finalEvent.shotResult ? finalEvent.shotResult.made : false;
 
       const analysis = generateTacticalWinAnalysis(
         possessionEvents,
@@ -1262,30 +1269,59 @@ export const useGameStore = create<GameState>((set, get) => ({
         newPossessionCount
       );
 
+      // Requirement 2: Mỗi khi thất bại, AI tự học hỏi và tìm hướng đi mới
+      let newMemory: AIAdaptiveMemory = { consecutiveFailures: 0 };
+      let thoughtText = '';
+
+      if (isWin) {
+        newMemory = { consecutiveFailures: 0 };
+        thoughtText = `🏆 CHIẾN THẮNG! ${analysis.title} (Thưởng: +${analysis.reward} pts)`;
+      } else if (isSteal) {
+        newMemory = {
+          lastFailureType: 'STEAL_TURNOVER',
+          lastFailedPlayer: finalEvent.player,
+          consecutiveFailures: (cur.aiAdaptiveMemory?.consecutiveFailures || 0) + 1,
+          favoredTactic: 'perimeter_ball_movement',
+        };
+        thoughtText = `⚠️ [HỌC TẬP TỪ THẤT BẠI] Bị ${finalEvent.stealer} cướp bóng ở cự ly ${finalEvent.stealDistance}m! AI tự đổi hướng: Đợt tới ưu tiên chuyền sớm hoặc gọi Screen che chắn!`;
+      } else {
+        const was3P = finalEvent.shotResult?.shotType === 'three';
+        newMemory = {
+          lastFailureType: was3P ? '3PT_MISSED' : 'MID_MISSED',
+          lastFailedPlayer: finalEvent.player,
+          consecutiveFailures: (cur.aiAdaptiveMemory?.consecutiveFailures || 0) + 1,
+          favoredTactic: was3P ? 'inside_attack' : 'pick_and_roll',
+        };
+        thoughtText = was3P
+          ? `❌ [HỌC TẬP TỪ THẤT BẠI] Ném 3 điểm hụt (${finalEvent.shotResult?.probability || 10}%). AI tự chuyển hướng: Không ném xa bừa bãi, đợt tới chuyển sang Pick & Roll và tấn công cận thành!`
+          : `❌ [HỌC TẬP TỪ THẤT BẠI] Cú ném không vào rổ (${finalEvent.shotResult?.probability || 30}%). AI tự tìm hướng mới: Luân chuyển bóng tìm góc thoáng!`;
+      }
+
       set({
+        aiAdaptiveMemory: newMemory,
         aiStats: {
           possessionsCount: newPossessionCount,
           winsCount: cur.aiStats.winsCount + (isWin ? 1 : 0),
-          totalReward: cur.aiStats.totalReward + analysis.reward,
+          turnoversCount: (cur.aiStats.turnoversCount || 0) + (isSteal ? 1 : 0),
+          totalReward: Math.max(0, cur.aiStats.totalReward + analysis.reward),
           latestWinAnalysis: isWin ? analysis : null,
           historyLog: [
             {
               id: analysis.id,
               isWin,
+              isSteal,
               reward: analysis.reward,
-              summary: `${isWin ? '✅ THẮNG' : '❌ HỤT'}: ${analysis.title} (+${analysis.pointsEarned}đ, thưởng +${analysis.reward} pts)`,
+              summary: `${isWin ? '✅ THẮNG' : isSteal ? '⚠️ MẤT BÓNG (STEAL)' : '❌ HỤT'}: ${analysis.title} (${analysis.pointsEarned > 0 ? `+${analysis.pointsEarned}đ, ` : ''}thưởng ${analysis.reward >= 0 ? `+${analysis.reward}` : analysis.reward} pts)`,
             },
             ...cur.aiStats.historyLog.slice(0, 19),
           ],
         },
-        aiCurrentThought: isWin
-          ? `🏆 CHIẾN THẮNG! ${analysis.title} (Thưởng: +${analysis.reward} pts)`
-          : `Cú ném không vào rổ (${finalEvent.shotResult?.probability || 45}%). AI tích lũy kinh nghiệm +${analysis.reward} pts. Đang chuẩn bị bài chạy mới...`,
+        aiCurrentThought: thoughtText,
       });
 
-      // If missed shot and still simulating, continue to next possession after short delay
+      // If not a win and still simulating, continue to next possession after short delay
       if (!isWin) {
-        await new Promise((resolve) => setTimeout(resolve, 1800));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         if (sessionId === currentSimulationSession && get().isSimulating && !get().isSimulationPaused) {
           get().runNextAIPossession();
         }

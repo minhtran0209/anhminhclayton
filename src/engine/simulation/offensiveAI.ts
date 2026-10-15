@@ -2,6 +2,7 @@ import { COURT_DIMENSIONS } from '../../config/constants';
 import { distance, clampPoint, calculateScreenPosition } from '../geometry/courtGeometry';
 import {
   ActionDraft,
+  AIAdaptiveMemory,
   AIPossessionAnalysis,
   DefensiveSettings,
   DefensiveSystem,
@@ -24,7 +25,7 @@ export interface AIDecisionResult {
 /**
  * Autonomous Offensive AI Brain
  * Evaluates current court geometry, defensive positions, coverage gaps,
- * and makes realistic, high-IQ tactical basketball decisions.
+ * adapts to recent failures (adaptive learning), and makes realistic basketball decisions.
  */
 export function decideNextAIAction(
   offense: Record<Position, Player>,
@@ -33,7 +34,8 @@ export function decideNextAIAction(
   defensiveSystem: DefensiveSystem,
   defensiveSettings: DefensiveSettings,
   activeScreen?: { screener: Position; target: Position; point: Point },
-  possessionStep: number = 1
+  possessionStep: number = 1,
+  adaptiveMemory?: AIAdaptiveMemory
 ): AIDecisionResult {
   const basket = COURT_DIMENSIONS.BASKET; // { x: 50, y: 8 }
   const ballCoord = offense[ballHolder].coord;
@@ -74,6 +76,43 @@ export function decideNextAIAction(
   const mostOpenTeammate = teammateEvaluations[0];
 
   // ==========================================
+  // ADAPTIVE EXPLORATION (Requirement 2: Tự tìm hướng đi mới sau thất bại)
+  // ==========================================
+  // A. Nếu đợt trước vừa bị Cướp Bóng (Steal), AI không rê dắt trước mặt hậu vệ áp sát!
+  if (adaptiveMemory?.lastFailureType === 'STEAL_TURNOVER' && minDefDist <= 3.8 && possessionStep <= 2) {
+    return {
+      draft: {
+        player: ballHolder,
+        action: 'pass',
+        targetPlayer: mostOpenTeammate.pos,
+        path: [ballCoord, mostOpenTeammate.coord],
+        isValid: true,
+      },
+      thought: `[THÍCH NGHI] Tránh bẫy cướp bóng: Hậu vệ đối phương đang áp sát (${minDefDist.toFixed(1)}m) -> AI chuyển hướng: Luân chuyển bóng nhanh sang cho ${mostOpenTeammate.pos} (${mostOpenTeammate.separation.toFixed(1)}m)!`,
+      tacticName: 'Chuyền Nhanh Thoát Áp Lực Steal',
+    };
+  }
+
+  // B. Nếu đợt trước ném 3 hụt, AI từ chối ném 3 sớm và chuyển sang khai thác Pick & Roll hoặc đột phá cận thành
+  const avoid3PtSpam = adaptiveMemory?.lastFailureType === '3PT_MISSED' && possessionStep <= 3;
+
+  if (avoid3PtSpam && !activeScreen && possessionStep <= 2) {
+    const screener: Position = offense.C.coord.y < offense.PF.coord.y ? 'PF' : 'C';
+    const screenTargetPoint = calculateScreenPosition(ballCoord, defense[closestDef].coord, 'top');
+    return {
+      draft: {
+        player: screener,
+        action: 'screen',
+        targetPlayer: ballHolder,
+        path: [offense[screener].coord, screenTargetPoint],
+        isValid: true,
+      },
+      thought: `[THÍCH NGHI] Đợt trước ném 3 hụt -> AI chuyển hướng: Không ném xa nữa, gọi ${screener} dâng cao Pick & Roll để đột phá cận thành!`,
+      tacticName: 'Đổi Hướng: Khai Thác Pick & Roll',
+    };
+  }
+
+  // ==========================================
   // RULE 1: FINISHING ATTEMPTS (Score bucket!)
   // ==========================================
   // A. Point blank near basket (< 22 court units) -> Layup
@@ -91,8 +130,9 @@ export function decideNextAIAction(
     };
   }
 
-  // B. Open perimeter or mid-range (separation >= 7.0 and in offensive half)
-  if (minDefDist >= 7.0 && distToBasket <= 75) {
+  // B. Open perimeter or mid-range
+  // Requirement 1: Only shoot within realistic 3PT range (distToBasket <= 50 && ballCoord.y <= 58), NOT from deep half-court (y=78 / dist=70)!
+  if (minDefDist >= 7.2 && distToBasket <= 50 && ballCoord.y <= 58 && !avoid3PtSpam) {
     return {
       draft: {
         player: ballHolder,
@@ -100,7 +140,7 @@ export function decideNextAIAction(
         path: [ballCoord, { x: 50, y: 8 }],
         isValid: true,
       },
-      thought: `Khoảng trống mênh mông (${minDefDist.toFixed(1)}m, cự ly ${Math.round(distToBasket)}m) -> Tự tin ném rổ WIDE OPEN!`,
+      thought: `Khoảng trống chuẩn cự ly (${minDefDist.toFixed(1)}m, cách rổ ${Math.round(distToBasket)}m) -> Tự tin ném rổ WIDE OPEN!`,
       tacticName: distToBasket >= 26 ? 'Ném 3 Điểm Trống Trải' : 'Ném Trung Bình Thoáng',
       isFinishingAttempt: true,
     };
@@ -111,7 +151,7 @@ export function decideNextAIAction(
     const screenerPos = activeScreen.screener;
     const isScreenerScreening = defense[closestDef]?.state === 'SCREENED' || minDefDist >= 7.2;
 
-    if (isScreenerScreening) {
+    if (isScreenerScreening && distToBasket <= 50 && ballCoord.y <= 58) {
       return {
         draft: {
           player: ballHolder,
@@ -139,10 +179,8 @@ export function decideNextAIAction(
   }
 
   // D. Possession clock running out:
-  // Step 4: pass to open shooter if huge separation, else shoot
-  // Step 5: MUST SHOOT before shot clock buzzer!
   if (possessionStep >= 4) {
-    if (possessionStep === 4 && mostOpenTeammate.separation >= 8.5) {
+    if (possessionStep === 4 && mostOpenTeammate.separation >= 8.5 && mostOpenTeammate.distBasket <= 34) {
       return {
         draft: {
           player: ballHolder,
@@ -155,11 +193,12 @@ export function decideNextAIAction(
         tacticName: 'Chuyền Bóng Dứt Điểm Gấp',
       };
     } else {
+      const isLayup = distToBasket <= 28;
       return {
         draft: {
           player: ballHolder,
-          action: distToBasket <= 28 ? 'layup' : 'shoot',
-          path: [ballCoord, { x: 50, y: distToBasket <= 28 ? 13 : 8 }],
+          action: isLayup ? 'layup' : 'shoot',
+          path: [ballCoord, { x: 50, y: isLayup ? 13 : 8 }],
           isValid: true,
         },
         thought: `Hết thời gian bài chạy (Nhịp ${possessionStep}/5) -> Quyết đoán tung cú dứt điểm rổ!`,
@@ -301,10 +340,11 @@ export function generateTacticalWinAnalysis(
   defensiveSettings: DefensiveSettings,
   totalPossessions: number
 ): AIPossessionAnalysis {
+  const isSteal = Boolean(finalEvent.isSteal);
   const shot = finalEvent.shotResult;
   const isWin = shot ? shot.made : false;
   const points = shot ? shot.points : 0;
-  const contestDist = shot ? shot.contestDistance : 7.0;
+  const contestDist = shot ? shot.contestDistance : (finalEvent.stealDistance || 7.0);
 
   // Calculate Reinforcement Reward Score
   let reward = 0;
@@ -319,6 +359,14 @@ export function generateTacticalWinAnalysis(
     } else if (shot?.contestLevel === 'OPEN') {
       reward += 35;
       keyTactics.push('Khoảng Trống Cận Kề');
+    }
+  } else if (isSteal) {
+    reward = -35; // Penalty for turnover
+    keyTactics.push('Bị Cướp Bóng (Steal)');
+  } else {
+    reward = 5; // Minimal exploration score
+    if (shot?.contestLevel === 'WIDE_OPEN') {
+      keyTactics.push('Tạo Góc Ném Tốt Nhưng Hụt');
     }
   }
 
@@ -347,7 +395,12 @@ export function generateTacticalWinAnalysis(
   let explanation = '';
   let defensiveBreakdown = '';
 
-  if (defensiveSystem === 'Man-to-Man') {
+  if (isSteal) {
+    title = `⚠️ Mất Quyền Kiểm Soát Bóng (${finalEvent.stealer} Steal)`;
+    summary = `Hậu vệ ${finalEvent.stealer} đã áp sát cự ly ${contestDist}m và cướp bóng thành công từ ${finalEvent.player}!`;
+    explanation = `Người cầm bóng giữ bóng quá lâu khi đối phương áp sát hoặc cố gắng rê dắt/chuyền bóng mà không có yểm trợ Screen. Đối thủ đã tận dụng cự ly gần để ra tay cướp bóng.`;
+    defensiveBreakdown = `Hệ thống phòng thủ ${defensiveSystem} với Áp lực ${defensiveSettings.pressure}% đã gây áp lực thành công buộc hàng công mắc lỗi mất bóng.`;
+  } else if (defensiveSystem === 'Man-to-Man') {
     title = screenEvent
       ? '🎯 Phối Hợp Pick & Roll Phá Vỡ 1 Kèm 1'
       : '⚡ Xuyên Phá Cự Ly Kèm Người Man-to-Man';
